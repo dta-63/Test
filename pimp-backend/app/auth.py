@@ -104,3 +104,32 @@ def assert_site_signature(site_id: str, timestamp: int, product_id: str, signatu
     expected = compute_site_signature(site_id, timestamp, product_id)
     if not hmac.compare_digest(expected, signature):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Bad site signature")
+
+
+def assert_webhook_signature(site_id: str, timestamp: int, event: str, product_id: str, signature: str) -> None:
+    """Server-to-server webhook auth: no user JWT, only the shared site key."""
+    key = settings.site_keys.get(site_id)
+    if not key:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Unknown site_id")
+    if abs(time.time() - timestamp) > 300:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Stale webhook timestamp")
+    msg = f"{site_id}.{timestamp}.{event}.{product_id}".encode()
+    expected = hmac.new(key.encode(), msg, hashlib.sha256).hexdigest()
+    if not hmac.compare_digest(expected, signature):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Bad webhook signature")
+
+
+def user_id_from_ws_token(token: str, db: Session) -> int:
+    """Decode a JWT passed via WebSocket query string; return the Pimp user id."""
+    payload = _decode_token(token)
+    sub = payload.get("sub")
+    if not sub:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Token missing sub claim")
+    user = db.query(User).filter(User.auth0_sub == sub).one_or_none()
+    if user is None:
+        email = payload.get("https://pimp/email") or payload.get("email")
+        user = User(auth0_sub=sub, email=email)
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+    return user.id

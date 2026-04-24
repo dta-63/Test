@@ -1,9 +1,8 @@
 import { AsyncPipe, CurrencyPipe, DatePipe, NgFor, NgIf } from '@angular/common';
-import { Component, OnInit, inject } from '@angular/core';
+import { Component, inject } from '@angular/core';
 import { AuthService } from '@auth0/auth0-angular';
-import { BehaviorSubject, switchMap } from 'rxjs';
 
-import { CartService, CartView } from './cart.service';
+import { CartStore } from './cart.store';
 
 @Component({
   selector: 'app-cart',
@@ -87,20 +86,17 @@ import { CartService, CartView } from './cart.service';
     .welcome { background: white; padding: 48px; border-radius: 12px; text-align: center; }
   `],
 })
-export class CartComponent implements OnInit {
+export class CartComponent {
   auth = inject(AuthService);
-  private api = inject(CartService);
+  private store = inject(CartStore);
 
-  private refresh$ = new BehaviorSubject<void>(undefined);
-  cart$ = this.refresh$.pipe(switchMap(() => this.api.getCart()));
-
-  ngOnInit(): void {}
+  cart$ = this.store.cart$;
 
   remove(id: number): void {
-    this.api.deleteItem(id).subscribe(() => this.refresh$.next());
+    this.store.remove(id);
   }
 
   clear(): void {
-    this.api.clearCart().subscribe(() => this.refresh$.next());
+    this.store.clear();
   }
 }

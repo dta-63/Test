@@ -15,6 +15,12 @@ final class Pimp_Cart_Plugin {
     public static function boot(): void {
         add_action('woocommerce_after_add_to_cart_button', [__CLASS__, 'render_button']);
         add_action('wp_enqueue_scripts', [__CLASS__, 'enqueue']);
+
+        // Product mutations -> notify Pimp. New products are skipped because
+        // no cart item can exist for a product that was just created.
+        add_action('woocommerce_update_product', [__CLASS__, 'on_product_updated'], 20, 1);
+        add_action('wp_trash_post',              [__CLASS__, 'on_post_trashed'], 20, 1);
+        add_action('before_delete_post',         [__CLASS__, 'on_post_deleted'], 20, 1);
     }
 
     private static function constants(): array {
@@ -103,6 +109,66 @@ final class Pimp_Cart_Plugin {
 
         wp_enqueue_script('pimp-cart');
         wp_enqueue_style('pimp-cart');
+    }
+
+    public static function on_product_updated($product_id): void {
+        $product = wc_get_product((int) $product_id);
+        if (!$product instanceof WC_Product) {
+            return;
+        }
+        $image_id  = $product->get_image_id();
+        $image_url = $image_id ? wp_get_attachment_image_url($image_id, 'medium') : null;
+
+        self::send_webhook('updated', (string) $product->get_id(), [
+            'product_name' => $product->get_name(),
+            'product_url'  => get_permalink($product->get_id()),
+            'image_url'    => $image_url ?: null,
+            'price'        => (float) $product->get_price(),
+            'currency'     => get_woocommerce_currency(),
+        ]);
+    }
+
+    public static function on_post_trashed($post_id): void {
+        if (get_post_type($post_id) !== 'product') {
+            return;
+        }
+        self::send_webhook('deleted', (string) $post_id, []);
+    }
+
+    public static function on_post_deleted($post_id): void {
+        if (get_post_type($post_id) !== 'product') {
+            return;
+        }
+        self::send_webhook('deleted', (string) $post_id, []);
+    }
+
+    private static function send_webhook(string $event, string $product_id, array $extra): void {
+        $c = self::constants();
+        if (!$c['api_url'] || !$c['site_id'] || !$c['site_key']) {
+            return;
+        }
+        $timestamp = time();
+        $signature = hash_hmac(
+            'sha256',
+            "{$c['site_id']}.{$timestamp}.{$event}.{$product_id}",
+            $c['site_key'],
+        );
+        $body = array_merge($extra, [
+            'event'          => $event,
+            'product_id'     => $product_id,
+            'site_id'        => $c['site_id'],
+            'site_timestamp' => $timestamp,
+            'site_signature' => $signature,
+        ]);
+
+        // Fire-and-forget: do not stall the admin request on Pimp latency.
+        wp_remote_post($c['api_url'] . '/api/webhooks/product', [
+            'method'   => 'POST',
+            'timeout'  => 2,
+            'blocking' => false,
+            'headers'  => ['Content-Type' => 'application/json'],
+            'body'     => wp_json_encode($body),
+        ]);
     }
 }
 

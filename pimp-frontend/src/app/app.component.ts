@@ -1,12 +1,16 @@
-import { AsyncPipe, NgIf } from '@angular/common';
-import { Component, inject } from '@angular/core';
+import { AsyncPipe, NgFor, NgIf } from '@angular/common';
+import { Component, OnDestroy, OnInit, inject } from '@angular/core';
 import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { AuthService } from '@auth0/auth0-angular';
+import { Subscription } from 'rxjs';
+
+import { NotificationsService } from './notifications.service';
+import { WebSocketService } from './websocket.service';
 
 @Component({
   selector: 'app-root',
   standalone: true,
-  imports: [RouterOutlet, RouterLink, RouterLinkActive, NgIf, AsyncPipe],
+  imports: [RouterOutlet, RouterLink, RouterLinkActive, NgIf, NgFor, AsyncPipe],
   template: `
     <header class="topbar">
       <a class="brand" routerLink="/">
@@ -26,6 +30,13 @@ import { AuthService } from '@auth0/auth0-angular';
       </nav>
     </header>
     <main><router-outlet /></main>
+
+    <div class="toasts" role="status" aria-live="polite">
+      <div *ngFor="let n of notif.notifications()" class="toast" [attr.data-kind]="n.kind">
+        <span>{{ n.message }}</span>
+        <button (click)="notif.dismiss(n.id)" aria-label="Fermer">×</button>
+      </div>
+    </div>
   `,
   styles: [`
     .topbar {
@@ -52,10 +63,49 @@ import { AuthService } from '@auth0/auth0-angular';
     nav a:hover { background: var(--pimp-bg); }
     nav a.active { color: var(--pimp-primary); background: var(--pimp-bg); }
     main { padding: 32px; max-width: 1000px; margin: 0 auto; }
+
+    .toasts {
+      position: fixed; bottom: 20px; right: 20px; z-index: 9999;
+      display: flex; flex-direction: column; gap: 10px;
+      max-width: 360px;
+    }
+    .toast {
+      background: white; border-left: 4px solid var(--pimp-primary);
+      padding: 12px 14px; border-radius: 8px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+      display: flex; align-items: flex-start; gap: 8px;
+      font-size: 14px; animation: toast-in 0.2s ease-out;
+    }
+    .toast[data-kind="success"] { border-left-color: #059669; }
+    .toast[data-kind="warning"] { border-left-color: #d97706; }
+    .toast button {
+      margin-left: auto; background: transparent; padding: 0 6px;
+      color: var(--pimp-muted); font-size: 18px; line-height: 1;
+    }
+    @keyframes toast-in {
+      from { transform: translateX(20px); opacity: 0; }
+      to   { transform: translateX(0);    opacity: 1; }
+    }
   `],
 })
-export class AppComponent {
+export class AppComponent implements OnInit, OnDestroy {
   auth = inject(AuthService);
+  notif = inject(NotificationsService);
+  private ws = inject(WebSocketService);
+
+  private sub?: Subscription;
+
+  ngOnInit(): void {
+    this.sub = this.auth.isAuthenticated$.subscribe((ok) => {
+      if (ok) this.ws.start();
+      else this.ws.stop();
+    });
+  }
+
+  ngOnDestroy(): void {
+    this.sub?.unsubscribe();
+    this.ws.stop();
+  }
 
   login(): void {
     this.auth.loginWithRedirect();
