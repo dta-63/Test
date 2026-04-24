@@ -85,6 +85,31 @@ wp --allow-root option update blogdescription "Démo e-commerce ($CATALOG) conne
 wp --allow-root option update pimp_site_accent "$ACCENT"
 wp --allow-root option update pimp_site_custom_css "$CSS"
 
+# Seed a WooCommerce REST API key used by Pimp to create orders on this site.
+# WC stores consumer_key hashed via hash_hmac('sha256', $key, 'wc-api') and
+# consumer_secret in clear (it's a shared secret, not a password).
+# We insert a fixed key so the Pimp backend can authenticate deterministically.
+PIMP_CK="${PIMP_WC_CONSUMER_KEY:-ck_pimp_${SLUG}}"
+PIMP_CS="${PIMP_WC_CONSUMER_SECRET:-cs_pimp_${SLUG}_secret}"
+echo "[init:$SLUG] seeding WooCommerce REST API key for Pimp..."
+wp --allow-root eval "
+global \$wpdb;
+\$table = \$wpdb->prefix . 'woocommerce_api_keys';
+\$key_hash = hash_hmac('sha256', '${PIMP_CK}', 'wc-api');
+\$wpdb->delete(\$table, ['description' => 'Pimp checkout']);
+\$wpdb->insert(\$table, [
+    'user_id'         => 1,
+    'description'     => 'Pimp checkout',
+    'permissions'     => 'read_write',
+    'consumer_key'    => \$key_hash,
+    'consumer_secret' => '${PIMP_CS}',
+    'truncated_key'   => substr('${PIMP_CK}', -7),
+]);
+"
+
+# Pretty permalinks are required for /wp-json/wc/v3/* to work.
+wp --allow-root rewrite structure '/%postname%/' --hard
+
 wp --allow-root option update pimp_demo_ready 1
 
 echo "[init:$SLUG] done. Admin: http://${SLUG}.localhost/wp-admin (admin / admin)"

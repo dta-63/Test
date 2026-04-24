@@ -3,11 +3,12 @@ import { Component, inject } from '@angular/core';
 import { AuthService } from '@auth0/auth0-angular';
 
 import { CartStore } from './cart.store';
+import { CheckoutDialogComponent } from './checkout-dialog.component';
 
 @Component({
   selector: 'app-cart',
   standalone: true,
-  imports: [NgIf, NgFor, AsyncPipe, CurrencyPipe, DatePipe],
+  imports: [NgIf, NgFor, AsyncPipe, CurrencyPipe, DatePipe, CheckoutDialogComponent],
   template: `
     <ng-container *ngIf="auth.isAuthenticated$ | async; else notLogged">
       <section *ngIf="cart$ | async as cart; else loading">
@@ -44,8 +45,11 @@ import { CartStore } from './cart.store';
         </div>
 
         <footer class="total" *ngIf="cart.items.length > 0">
-          <span>Total</span>
-          <strong>{{ cart.total | currency: cart.currency }}</strong>
+          <div>
+            <span class="muted">Total</span>
+            <strong>{{ cart.total | currency: cart.currency }}</strong>
+          </div>
+          <button class="btn-primary" (click)="openCheckout()">Valider ma commande</button>
         </footer>
       </section>
       <ng-template #loading><p>Chargement du panier…</p></ng-template>
@@ -57,6 +61,8 @@ import { CartStore } from './cart.store';
         <p>Connectez-vous pour consulter votre panier unifié depuis Shop A et Shop B.</p>
       </div>
     </ng-template>
+
+    <app-checkout-dialog *ngIf="checkoutOpen" (closed)="checkoutOpen = false"></app-checkout-dialog>
   `,
   styles: [`
     .header-row { display: flex; justify-content: space-between; align-items: center; }
@@ -82,7 +88,11 @@ import { CartStore } from './cart.store';
     .total {
       margin-top: 24px; background: white; padding: 20px; border-radius: 12px;
       display: flex; justify-content: space-between; align-items: center; font-size: 18px;
+      gap: 16px; flex-wrap: wrap;
     }
+    .total > div { display: flex; flex-direction: column; }
+    .total .muted { color: var(--pimp-muted); font-size: 13px; }
+    .total strong { font-size: 20px; }
     .welcome { background: white; padding: 48px; border-radius: 12px; text-align: center; }
   `],
 })
@@ -91,6 +101,7 @@ export class CartComponent {
   private store = inject(CartStore);
 
   cart$ = this.store.cart$;
+  checkoutOpen = false;
 
   remove(id: number): void {
     this.store.remove(id);
@@ -98,5 +109,9 @@ export class CartComponent {
 
   clear(): void {
     this.store.clear();
+  }
+
+  openCheckout(): void {
+    this.checkoutOpen = true;
   }
 }

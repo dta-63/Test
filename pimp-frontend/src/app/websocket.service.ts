@@ -88,6 +88,9 @@ export class WebSocketService {
         );
         this.cart.refresh();
         return;
+      case 'cart.checked_out':
+        this.cart.refresh();
+        return;
     }
   }
 

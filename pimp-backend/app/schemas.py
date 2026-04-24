@@ -56,3 +56,36 @@ class AccountStats(BaseModel):
 class AccountView(BaseModel):
     user: UserOut
     stats: AccountStats
+
+
+class BillingInfo(BaseModel):
+    first_name: str = Field(min_length=1, max_length=100)
+    last_name: str = Field(min_length=1, max_length=100)
+    email: str = Field(min_length=3, max_length=320)
+    phone: str | None = Field(default=None, max_length=40)
+    address_1: str = Field(min_length=1, max_length=255)
+    address_2: str | None = Field(default=None, max_length=255)
+    postcode: str = Field(min_length=1, max_length=20)
+    city: str = Field(min_length=1, max_length=120)
+    country: str = Field(default="FR", min_length=2, max_length=2)
+
+
+class CheckoutIn(BaseModel):
+    billing: BillingInfo
+    customer_note: str | None = Field(default=None, max_length=500)
+
+
+class CheckoutOrder(BaseModel):
+    site_id: str
+    status: str  # "created" | "failed"
+    order_id: int | None = None
+    order_number: str | None = None
+    order_url: str | None = None
+    total: str | None = None
+    currency: str | None = None
+    error: str | None = None
+
+
+class CheckoutResult(BaseModel):
+    orders: list[CheckoutOrder]
+    fully_succeeded: bool

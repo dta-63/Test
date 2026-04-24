@@ -41,6 +41,14 @@ services:
       CORS_ORIGINS: ${CORS_ORIGINS:-http://pimp.localhost,http://shop-a.localhost,http://shop-b.localhost}
       SITE_A_KEY: ${SITE_A_KEY:-site-a-secret}
       SITE_B_KEY: ${SITE_B_KEY:-site-b-secret}
+      SHOP_A_WC_URL: http://shop-a
+      SHOP_A_WC_HOST: shop-a.localhost
+      SHOP_A_WC_CONSUMER_KEY: ${SHOP_A_WC_CONSUMER_KEY:-ck_pimp_shop-a}
+      SHOP_A_WC_CONSUMER_SECRET: ${SHOP_A_WC_CONSUMER_SECRET:-cs_pimp_shop-a_secret}
+      SHOP_B_WC_URL: http://shop-b
+      SHOP_B_WC_HOST: shop-b.localhost
+      SHOP_B_WC_CONSUMER_KEY: ${SHOP_B_WC_CONSUMER_KEY:-ck_pimp_shop-b}
+      SHOP_B_WC_CONSUMER_SECRET: ${SHOP_B_WC_CONSUMER_SECRET:-cs_pimp_shop-b_secret}
     depends_on:
       pimp-db:
         condition: service_healthy
@@ -116,6 +124,8 @@ services:
       WORDPRESS_DB_USER: wordpress
       WORDPRESS_DB_PASSWORD: wordpress
       WORDPRESS_DB_NAME: wordpress
+      PIMP_WC_CONSUMER_KEY: ${SHOP_A_WC_CONSUMER_KEY:-ck_pimp_shop-a}
+      PIMP_WC_CONSUMER_SECRET: ${SHOP_A_WC_CONSUMER_SECRET:-cs_pimp_shop-a_secret}
     volumes:
       - shop-a-data:/var/www/html
       - ./wordpress/plugins/pimp-cart:/var/www/html/wp-content/plugins/pimp-cart
@@ -175,6 +185,8 @@ services:
       WORDPRESS_DB_USER: wordpress
       WORDPRESS_DB_PASSWORD: wordpress
       WORDPRESS_DB_NAME: wordpress
+      PIMP_WC_CONSUMER_KEY: ${SHOP_B_WC_CONSUMER_KEY:-ck_pimp_shop-b}
+      PIMP_WC_CONSUMER_SECRET: ${SHOP_B_WC_CONSUMER_SECRET:-cs_pimp_shop-b_secret}
     volumes:
       - shop-b-data:/var/www/html
       - ./wordpress/plugins/pimp-cart:/var/www/html/wp-content/plugins/pimp-cart
