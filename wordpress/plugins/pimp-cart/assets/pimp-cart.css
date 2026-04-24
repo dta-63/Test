@@ -1,0 +1,29 @@
+.pimp-add-to-cart {
+  background: #7c3aed !important;
+  color: #ffffff !important;
+  border: none !important;
+  padding: 10px 18px !important;
+  margin-left: 10px !important;
+  border-radius: 6px !important;
+  font-weight: 600 !important;
+  cursor: pointer !important;
+}
+
+.pimp-add-to-cart:hover {
+  background: #5b21b6 !important;
+}
+
+.pimp-add-to-cart[disabled] {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+.pimp-status {
+  display: inline-block;
+  margin-left: 10px;
+  font-size: 13px;
+}
+
+.pimp-status[data-kind="success"] { color: #047857; }
+.pimp-status[data-kind="error"]   { color: #b91c1c; }
+.pimp-status[data-kind="pending"] { color: #6b7280; }
