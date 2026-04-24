@@ -42,3 +42,17 @@ class UserOut(BaseModel):
     id: int
     auth0_sub: str
     email: str | None
+    created_at: datetime
+
+
+class AccountStats(BaseModel):
+    total_items: int
+    total_quantity: int
+    total_value: float
+    currency: str
+    by_site: dict[str, int]
+
+
+class AccountView(BaseModel):
+    user: UserOut
+    stats: AccountStats

@@ -4,14 +4,9 @@ from sqlalchemy.orm import Session
 from ..auth import assert_site_signature, get_current_user
 from ..database import get_db
 from ..models import CartItem, User
-from ..schemas import CartItemIn, CartItemOut, CartView, UserOut
+from ..schemas import CartItemIn, CartItemOut, CartView
 
 router = APIRouter()
-
-
-@router.get("/me", response_model=UserOut)
-def me(user: User = Depends(get_current_user)) -> User:
-    return user
 
 
 @router.get("/cart", response_model=CartView)
