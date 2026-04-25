@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .config import settings
 from .database import Base, engine
-from .routers import account, cart, checkout, webhooks, ws
+from .routers import account, b2b, cart, checkout, webhooks, ws
 
 Base.metadata.create_all(bind=engine)
 
@@ -18,6 +18,7 @@ app.add_middleware(
 )
 
 app.include_router(account.router, prefix="/api")
+app.include_router(b2b.router, prefix="/api")
 app.include_router(cart.router, prefix="/api")
 app.include_router(checkout.router, prefix="/api")
 app.include_router(webhooks.router, prefix="/api")

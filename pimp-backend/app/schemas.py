@@ -45,6 +45,11 @@ class UserOut(BaseModel):
     created_at: datetime
 
 
+class MeOut(BaseModel):
+    user: UserOut
+    is_b2b: bool
+
+
 class AccountStats(BaseModel):
     total_items: int
     total_quantity: int

@@ -52,14 +52,7 @@ def _decode_token(token: str) -> dict:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, f"Invalid token: {e}") from e
 
 
-def get_current_user(
-    authorization: str | None = Header(default=None),
-    db: Session = Depends(get_db),
-) -> User:
-    if not authorization or not authorization.lower().startswith("bearer "):
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Missing bearer token")
-    payload = _decode_token(authorization.split(" ", 1)[1])
-
+def user_from_payload(payload: dict, db: Session) -> User:
     sub = payload.get("sub")
     if not sub:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Token missing sub claim")
@@ -73,6 +66,46 @@ def get_current_user(
         db.add(user)
         db.commit()
         db.refresh(user)
+    return user
+
+
+def decode_bearer(authorization: str | None) -> dict:
+    if not authorization or not authorization.lower().startswith("bearer "):
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Missing bearer token")
+    return _decode_token(authorization.split(" ", 1)[1])
+
+
+def get_current_user(
+    authorization: str | None = Header(default=None),
+    db: Session = Depends(get_db),
+) -> User:
+    return user_from_payload(decode_bearer(authorization), db)
+
+
+def is_b2b_principal(user: User, payload: dict) -> bool:
+    """Resolve B2B membership from the JWT (preferred) or an email allowlist."""
+    perms = payload.get("permissions") or []
+    if isinstance(perms, list) and settings.b2b_required_permission in perms:
+        return True
+
+    roles = payload.get(settings.b2b_role_claim) or []
+    if isinstance(roles, list) and "b2b" in roles:
+        return True
+
+    if user.email and user.email.lower() in settings.b2b_email_allowlist:
+        return True
+
+    return False
+
+
+def require_b2b(
+    authorization: str | None = Header(default=None),
+    db: Session = Depends(get_db),
+) -> User:
+    payload = decode_bearer(authorization)
+    user = user_from_payload(payload, db)
+    if not is_b2b_principal(user, payload):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "B2B access required")
     return user
 
 

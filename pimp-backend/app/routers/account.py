@@ -1,19 +1,24 @@
 from collections import Counter
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Header, status
 from sqlalchemy.orm import Session
 
-from ..auth import get_current_user
+from ..auth import decode_bearer, get_current_user, is_b2b_principal, user_from_payload
 from ..database import get_db
 from ..models import CartItem, User
-from ..schemas import AccountStats, AccountView, UserOut
+from ..schemas import AccountStats, AccountView, MeOut, UserOut
 
 router = APIRouter()
 
 
-@router.get("/me", response_model=UserOut)
-def me(user: User = Depends(get_current_user)) -> User:
-    return user
+@router.get("/me", response_model=MeOut)
+def me(
+    authorization: str | None = Header(default=None),
+    db: Session = Depends(get_db),
+) -> MeOut:
+    payload = decode_bearer(authorization)
+    user = user_from_payload(payload, db)
+    return MeOut(user=UserOut.model_validate(user), is_b2b=is_b2b_principal(user, payload))
 
 
 @router.get("/account", response_model=AccountView)

@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from ..auth import get_current_user
 from ..config import settings
 from ..database import get_db
-from ..models import CartItem, User
+from ..models import CartItem, PimpOrder, PimpOrderItem, User
 from ..schemas import CheckoutIn, CheckoutOrder, CheckoutResult
 from ..websockets import manager
 from ..woocommerce import WooCommerceError, create_order
@@ -60,6 +60,32 @@ async def checkout(
                 currency=order.get("currency"),
             ),
         )
+
+        # Persist a snapshot for B2B analytics. Source of truth stays WC.
+        snapshot = PimpOrder(
+            user_id=user.id,
+            site_id=site_id,
+            woo_order_id=int(order_id) if order_id else 0,
+            woo_order_number=str(order.get("number") or order_id or ""),
+            customer_email=payload.billing.email,
+            customer_first_name=payload.billing.first_name,
+            customer_last_name=payload.billing.last_name,
+            total=float(order.get("total") or 0),
+            currency=str(order.get("currency") or "EUR"),
+            status=str(order.get("status") or "pending"),
+            items_count=sum(i.quantity for i in site_items),
+        )
+        for item in site_items:
+            snapshot.items.append(
+                PimpOrderItem(
+                    product_id=item.product_id,
+                    product_name=item.product_name,
+                    quantity=item.quantity,
+                    price=float(item.price),
+                ),
+            )
+        db.add(snapshot)
+
         # On success, drop these items from the Pimp cart.
         for item in site_items:
             db.delete(item)

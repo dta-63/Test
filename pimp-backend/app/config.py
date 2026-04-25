@@ -30,9 +30,17 @@ class Settings(BaseSettings):
     shop_b_wc_consumer_key: str = ""
     shop_b_wc_consumer_secret: str = ""
 
+    b2b_emails: str = ""
+    b2b_role_claim: str = "https://pimp/roles"
+    b2b_required_permission: str = "b2b:read"
+
     @property
     def allowed_origins(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
+
+    @property
+    def b2b_email_allowlist(self) -> set[str]:
+        return {e.strip().lower() for e in self.b2b_emails.split(",") if e.strip()}
 
     @property
     def site_keys(self) -> dict[str, str]:

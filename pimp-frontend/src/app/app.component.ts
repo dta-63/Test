@@ -4,6 +4,7 @@ import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { AuthService } from '@auth0/auth0-angular';
 import { Subscription } from 'rxjs';
 
+import { MeService } from './me.service';
 import { NotificationsService } from './notifications.service';
 import { WebSocketService } from './websocket.service';
 
@@ -22,6 +23,9 @@ import { WebSocketService } from './websocket.service';
         <ng-container *ngIf="auth.isAuthenticated$ | async; else loginBtn">
           <a routerLink="/" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }">Panier</a>
           <a routerLink="/account" routerLinkActive="active">Mon compte</a>
+          <a *ngIf="(me.me$ | async)?.is_b2b" routerLink="/b2b" routerLinkActive="active" class="b2b-link">
+            <span class="dot"></span>B2B
+          </a>
           <button class="btn-ghost" (click)="logout()">Se déconnecter</button>
         </ng-container>
         <ng-template #loginBtn>
@@ -62,7 +66,12 @@ import { WebSocketService } from './websocket.service';
     }
     nav a:hover { background: var(--pimp-bg); }
     nav a.active { color: var(--pimp-primary); background: var(--pimp-bg); }
-    main { padding: 32px; max-width: 1000px; margin: 0 auto; }
+    nav a.b2b-link { display: inline-flex; align-items: center; gap: 6px; }
+    nav a.b2b-link .dot {
+      width: 6px; height: 6px; border-radius: 50%;
+      background: #059669; box-shadow: 0 0 0 3px rgba(5,150,105,0.15);
+    }
+    main { padding: 32px; max-width: 1100px; margin: 0 auto; }
 
     .toasts {
       position: fixed; bottom: 20px; right: 20px; z-index: 9999;
@@ -90,6 +99,7 @@ import { WebSocketService } from './websocket.service';
 })
 export class AppComponent implements OnInit, OnDestroy {
   auth = inject(AuthService);
+  me = inject(MeService);
   notif = inject(NotificationsService);
   private ws = inject(WebSocketService);
 
@@ -97,8 +107,12 @@ export class AppComponent implements OnInit, OnDestroy {
 
   ngOnInit(): void {
     this.sub = this.auth.isAuthenticated$.subscribe((ok) => {
-      if (ok) this.ws.start();
-      else this.ws.stop();
+      if (ok) {
+        this.ws.start();
+        this.me.load();
+      } else {
+        this.ws.stop();
+      }
     });
   }
 
