@@ -50,6 +50,9 @@ services:
       SHOP_B_WC_CONSUMER_KEY: ${SHOP_B_WC_CONSUMER_KEY:-ck_pimp_shop-b}
       SHOP_B_WC_CONSUMER_SECRET: ${SHOP_B_WC_CONSUMER_SECRET:-cs_pimp_shop-b_secret}
       B2B_EMAILS: ${B2B_EMAILS:-}
+      CART_TTL_SECONDS: ${CART_TTL_SECONDS:-604800}
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+      STRIPE_PUBLISHABLE_KEY: ${STRIPE_PUBLISHABLE_KEY:-}
     depends_on:
       pimp-db:
         condition: service_healthy

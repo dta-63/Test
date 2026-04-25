@@ -91,7 +91,18 @@ export class WebSocketService {
       case 'cart.checked_out':
         this.cart.refresh();
         return;
+      case 'order.status_changed':
+        this.notif.push(this.statusChangeMessage(event), 'info', 7000);
+        return;
     }
+  }
+
+  private statusChangeMessage(event: ServerEvent & { woo_order_number?: string; new_status?: string; tracking_number?: string }): string {
+    const site = this.siteLabel(event.site_id);
+    const num = event.woo_order_number ? `#${event.woo_order_number}` : '';
+    const status = event.new_status ?? '?';
+    const tracking = event.tracking_number ? ` — suivi: ${event.tracking_number}` : '';
+    return `Commande ${num} (${site}) → ${status}${tracking}`;
   }
 
   private siteLabel(siteId: string | undefined): string {

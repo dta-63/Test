@@ -1,7 +1,24 @@
 # Pimp — panier unifié multi-boutiques
 
 Deux boutiques WordPress/WooCommerce et un SaaS Angular + FastAPI qui agrègent
-un panier unique par utilisateur, authentification gérée par **Auth0**.
+un panier unique par utilisateur, authentification gérée par **Auth0**, paiement
+unique via **Stripe**, prix recalculés via les moteurs natifs des boutiques,
+suivi de commandes en temps réel, dashboard B2B.
+
+## Cartographie cahier des charges → implémentation
+
+| Spec | Implémentation |
+| --- | --- |
+| Bouton "Ajouter à mon panier PIMP" sur les pages produit | `wordpress/plugins/pimp-cart` — hook `woocommerce_after_add_to_cart_button` |
+| SSO utilisateur (IdP centralisé, sessions cross-domain) | Auth0 SPA flow (PKCE) côté SaaS *et* dans le plugin (auth0-spa-js, `cacheLocation: localstorage` + `useRefreshTokens`) |
+| S2S bidirectionnel | **Site → Pimp** : HMAC SHA256 sur les webhooks (clé partagée par site) ; **Pimp → Site** : (a) WC REST API consumer key/secret pour les commandes, (b) HMAC SHA256 custom sur `/wp-json/pimp/v1/*` |
+| Application du prix de la boutique (WC_Cart) | `POST /api/cart/preview` (Pimp) → `POST /wp-json/pimp/v1/cart/preview` (plugin) qui instancie `WC_Cart`, calcule subtotal / discount / shipping / tax / total |
+| Filtrage hooks via table SQL des produits actifs | Table `wp_pimp_active_products` ; hooks produit court-circuités si le produit n'est pas dans la table ; Pimp envoie touch/forget via `/wp-json/pimp/v1/active-products` à chaque add/remove/checkout |
+| TTL du panier (configurable) | `CART_TTL_SECONDS` env (par défaut 7 jours), `CartItem.expires_at`, purge à la lecture du panier + notification aux shops |
+| Création des commandes via API marchande | `POST /wp-json/wc/v3/orders` avec billing + shipping + line_items + transaction_id (cf. spec) |
+| Suivi des commandes (statut, tracking) | Hook `woocommerce_order_status_changed` → `POST /api/webhooks/order` (HMAC) → mise à jour `PimpOrder.status` + push WS `order.status_changed` (+ tracking_number / tracking_url) |
+| Paiement unique via PSP | **Stripe Payment Intent** — `POST /api/payment/intent` crée le PI, `POST /api/payment/confirm` vérifie `status=succeeded` puis crée chaque commande WC avec `set_paid: true`, `transaction_id: <stripe_charge_id>`, `payment_method_title: "Stripe via Pimp"` |
+| Dashboard / suivi B2B | `/api/b2b/dashboard` + page Angular `/b2b` (KPIs, sparkline 30j, top produits, dernières commandes) |
 
 ## Architecture
 
@@ -52,8 +69,16 @@ Deux couches, chacune nécessaire :
 
 ```bash
 cp .env.example .env
-# éditer AUTH0_DOMAIN, AUTH0_API_AUDIENCE, AUTH0_SPA_CLIENT_ID
+# Auth0 (obligatoire)
+#   AUTH0_DOMAIN, AUTH0_API_AUDIENCE, AUTH0_SPA_CLIENT_ID
+# Stripe (optionnel mais recommandé pour le paiement unifié)
+#   STRIPE_SECRET_KEY, STRIPE_PUBLISHABLE_KEY (clés de test)
+# B2B (optionnel)
+#   B2B_EMAILS=alice@example.com
 ```
+
+Sans clés Stripe, le checkout retombe en mode "commandes en attente de paiement"
+(le marchand traite manuellement).
 
 ### 3. Ajouter les hosts locaux
 

@@ -34,6 +34,13 @@ class Settings(BaseSettings):
     b2b_role_claim: str = "https://pimp/roles"
     b2b_required_permission: str = "b2b:read"
 
+    # Cart validity (TTL). Items older than this are dropped at fetch time.
+    cart_ttl_seconds: int = 60 * 60 * 24 * 7  # 7 days
+
+    # Stripe (PSP) for unified checkout. Test keys are fine for the demo.
+    stripe_secret_key: str = ""
+    stripe_publishable_key: str = ""
+
     @property
     def allowed_origins(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]

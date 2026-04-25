@@ -32,6 +32,7 @@ class CartItem(Base):
     currency: Mapped[str] = mapped_column(String(8), default="EUR")
     quantity: Mapped[int] = mapped_column(Integer, default=1)
     added_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
 
     user: Mapped[User] = relationship(back_populates="cart_items")
 

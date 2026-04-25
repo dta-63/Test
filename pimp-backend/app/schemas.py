@@ -77,6 +77,7 @@ class BillingInfo(BaseModel):
 
 class CheckoutIn(BaseModel):
     billing: BillingInfo
+    shipping: "ShippingAddress | None" = None
     customer_note: str | None = Field(default=None, max_length=500)
 
 
@@ -94,3 +95,37 @@ class CheckoutOrder(BaseModel):
 class CheckoutResult(BaseModel):
     orders: list[CheckoutOrder]
     fully_succeeded: bool
+
+
+class ShippingAddress(BaseModel):
+    first_name: str = Field(min_length=1, max_length=100)
+    last_name: str = Field(min_length=1, max_length=100)
+    phone: str | None = Field(default=None, max_length=40)
+    address_1: str = Field(min_length=1, max_length=255)
+    address_2: str | None = Field(default=None, max_length=255)
+    postcode: str = Field(min_length=1, max_length=20)
+    city: str = Field(min_length=1, max_length=120)
+    country: str = Field(default="FR", min_length=2, max_length=2)
+
+
+class PreviewIn(BaseModel):
+    billing: BillingInfo
+    shipping: ShippingAddress | None = None
+
+
+class PreviewSite(BaseModel):
+    site_id: str
+    currency: str
+    items_subtotal: float
+    discount_total: float
+    shipping_total: float
+    tax_total: float
+    total: float
+    coupons_applied: list[str] = []
+    error: str | None = None
+
+
+class PreviewResult(BaseModel):
+    sites: list[PreviewSite]
+    grand_total: float
+    currency: str

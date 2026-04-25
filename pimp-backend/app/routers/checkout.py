@@ -8,6 +8,7 @@ from ..config import settings
 from ..database import get_db
 from ..models import CartItem, PimpOrder, PimpOrderItem, User
 from ..schemas import CheckoutIn, CheckoutOrder, CheckoutResult
+from ..shop_sync import notify_active_products
 from ..websockets import manager
 from ..woocommerce import WooCommerceError, create_order
 
@@ -30,6 +31,7 @@ async def checkout(
         grouped[item.site_id].append(item)
 
     billing = payload.billing.model_dump(exclude_none=True)
+    shipping = payload.shipping.model_dump(exclude_none=True) if payload.shipping else billing
     results: list[CheckoutOrder] = []
 
     for site_id, site_items in grouped.items():
@@ -40,7 +42,7 @@ async def checkout(
 
         line_items = [{"product_id": int(i.product_id), "quantity": i.quantity} for i in site_items]
         try:
-            order = await create_order(shop, line_items, billing)
+            order = await create_order(shop, line_items, billing, shipping=shipping, customer_note=payload.customer_note)
         except WooCommerceError as e:
             results.append(CheckoutOrder(site_id=site_id, status="failed", error=e.detail))
             continue
@@ -87,8 +89,13 @@ async def checkout(
         db.add(snapshot)
 
         # On success, drop these items from the Pimp cart.
+        forgettable = [i.product_id for i in site_items]
         for item in site_items:
             db.delete(item)
+        try:
+            await notify_active_products(site_id, [], forgettable)
+        except Exception:
+            pass
 
     db.commit()
 

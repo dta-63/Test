@@ -6,6 +6,7 @@ import { Subscription } from 'rxjs';
 
 import { MeService } from './me.service';
 import { NotificationsService } from './notifications.service';
+import { PublicConfigService } from './public-config.service';
 import { WebSocketService } from './websocket.service';
 
 @Component({
@@ -101,11 +102,13 @@ export class AppComponent implements OnInit, OnDestroy {
   auth = inject(AuthService);
   me = inject(MeService);
   notif = inject(NotificationsService);
+  private cfg = inject(PublicConfigService);
   private ws = inject(WebSocketService);
 
   private sub?: Subscription;
 
   ngOnInit(): void {
+    this.cfg.load();
     this.sub = this.auth.isAuthenticated$.subscribe((ok) => {
       if (ok) {
         this.ws.start();
