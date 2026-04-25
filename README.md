@@ -18,7 +18,7 @@ suivi de commandes en temps réel, dashboard B2B.
 | Création des commandes via API marchande | `POST /wp-json/wc/v3/orders` avec billing + shipping + line_items + transaction_id (cf. spec) |
 | Suivi des commandes (statut, tracking) | Hook `woocommerce_order_status_changed` → `POST /api/webhooks/order` (HMAC) → mise à jour `PimpOrder.status` + push WS `order.status_changed` (+ tracking_number / tracking_url) |
 | Paiement unique via PSP | **Stripe Payment Intent** — `POST /api/payment/intent` crée le PI, `POST /api/payment/confirm` vérifie `status=succeeded` puis crée chaque commande WC avec `set_paid: true`, `transaction_id: <stripe_charge_id>`, `payment_method_title: "Stripe via Pimp"` |
-| Dashboard / suivi B2B | `/api/b2b/dashboard` + page Angular `/b2b` (KPIs, sparkline 30j, top produits, dernières commandes) |
+| Dashboard / suivi B2B | `/api/b2b/dashboard` + page Angular `/b2b` — KPIs avec delta période précédente, filtres période (7/30/90/12m/all) et boutique, sparkline, top produits, tableau commandes paginé + recherche, modal détail commande, export CSV |
 
 ## Architecture
 
@@ -122,6 +122,79 @@ Premier démarrage : ~2-3 min (WP + Woo + seed).
 5. Répéter sur `http://shop-b.localhost`.
 6. Ouvrir `http://pimp.localhost`, se connecter (même compte Auth0).
 7. Les articles des deux boutiques apparaissent dans un panier unique.
+8. Cliquer **Valider ma commande** → renseigner les adresses → payer via Stripe
+   (carte test `4242 4242 4242 4242`, n'importe quelle date future, n'importe
+   quel CVC).
+9. Pimp crée une commande sur chaque boutique, marquée `processing` avec le
+   `transaction_id` Stripe.
+
+## Espace B2B
+
+Accessible aux utilisateurs identifiés comme B2B (cf. § Configuration B2B).
+Un lien `B2B` apparaît dans le header du SaaS quand le compte est éligible.
+
+### Indicateurs
+
+- **KPIs** : nombre de commandes, CA, panier moyen, boutiques actives. Les deux
+  premiers affichent un delta `+X%` ou `-X%` vs la période précédente
+  équivalente (sauf en mode "Tout").
+- **Sparkline** dimensionnée à la période sélectionnée (7j / 30j / 90j ; 12m
+  condense en 90 cellules).
+- **Répartition par boutique** : barres horizontales colorées Shop A / Shop B.
+- **Statuts** : compteur par statut WooCommerce (`pending`, `processing`,
+  `completed`, `cancelled`, `refunded`...).
+- **Top 5 produits** (par quantité vendue, sur la période + le filtre site).
+- **Tableau commandes** : 50 par page, recherche full-text sur n° de commande,
+  email et nom de client, ligne cliquable → modal détail.
+
+### Filtres
+
+| Contrôle | Effet |
+| --- | --- |
+| Période (`7j` / `30j` / `90j` / `12m` / `Tout`) | Filtre toutes les agrégations + redimensionne la série temporelle |
+| Boutique (`Toutes` / `Shop A` / `Shop B`) | Filtre KPIs, top produits, tableau commandes |
+| Recherche | Filtre uniquement le tableau commandes (debounce 250 ms, ILIKE sur n°/email/nom) |
+
+Chaque changement de filtre relance le dashboard ; la pagination revient à 0.
+
+### Détail d'une commande
+
+Clic sur une ligne → modal avec :
+- Boutique, statut (pill colorée), date
+- Nom + email client, total
+- Liste des articles (nom, ID produit, quantité, prix unitaire, sous-total)
+- Lien direct vers `/wp-admin/post.php?post=X&action=edit` sur le shop concerné
+
+### Export CSV
+
+Bouton **Exporter CSV** à droite de la barre de recherche. Le téléchargement
+respecte les filtres actifs (période, boutique, recherche) ; le CSV utilise
+`;` comme séparateur (compatible Excel FR) et est nommé
+`pimp-orders-<période>-<site>.csv`.
+
+### Endpoints B2B
+
+| Méthode | URL | Rôle |
+| --- | --- | --- |
+| `GET` | `/api/b2b/dashboard?period=&site=` | KPIs, séries, top, dernières commandes |
+| `GET` | `/api/b2b/orders?period=&site=&q=&status=&limit=&offset=` | Liste paginée |
+| `GET` | `/api/b2b/orders/{id}` | Détail commande + line items |
+| `GET` | `/api/b2b/orders.csv?period=&site=&q=` | Export CSV |
+
+Tous protégés par `require_b2b` (JWT scope `b2b:read` ou rôle `b2b` ou email
+dans `B2B_EMAILS`).
+
+### Configuration B2B
+
+Trois moyens d'accorder l'accès, dans l'ordre de priorité :
+
+1. **Auth0 RBAC (recommandé en prod)** : activer RBAC sur l'API,
+   créer la permission `b2b:read`, l'assigner à un rôle, assigner le rôle aux
+   utilisateurs, activer "Add Permissions in the Access Token".
+2. **Custom claim Auth0 Action** : émettre `https://pimp/roles` contenant
+   `"b2b"` dans l'access token.
+3. **Allowlist email (démo)** : `B2B_EMAILS=alice@example.com,bob@company.fr`
+   dans `.env`.
 
 ## Développement
 
