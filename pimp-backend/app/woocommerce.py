@@ -12,12 +12,21 @@ class WooCommerceError(Exception):
         self.detail = detail
 
 
+def line_item_for(product_id: str, variation_id: str | None, quantity: int) -> dict[str, Any]:
+    """Build a WC orders line_items entry. Variations require both ids."""
+    item: dict[str, Any] = {"product_id": int(product_id), "quantity": int(quantity)}
+    if variation_id:
+        item["variation_id"] = int(variation_id)
+    return item
+
+
 async def create_order(
     shop: ShopAPI,
     line_items: list[dict[str, Any]],
     billing: dict[str, Any],
     *,
     shipping: dict[str, Any] | None = None,
+    shipping_lines: list[dict[str, Any]] | None = None,
     customer_note: str | None = None,
     transaction_id: str | None = None,
     payment_method: str | None = None,
@@ -54,6 +63,8 @@ async def create_order(
         body["payment_method"] = payment_method
     if payment_method_title:
         body["payment_method_title"] = payment_method_title
+    if shipping_lines:
+        body["shipping_lines"] = shipping_lines
 
     headers: dict[str, str] = {"X-Pimp-Request": "1"}
     if shop.host:

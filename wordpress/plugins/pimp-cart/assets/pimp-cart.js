@@ -25,7 +25,41 @@
     return auth0ClientPromise;
   }
 
-  // Complete the Auth0 redirect if we come back from the login flow.
+  // Read the chosen quantity + variation from the product page at click time.
+  function readSelection(btn) {
+    const productId = btn.dataset.productId;
+    const form = btn.closest('form.cart') || document;
+    const qtyInput = form.querySelector('input.qty');
+    const quantity = qtyInput ? Math.max(1, parseInt(qtyInput.value, 10) || 1) : 1;
+    const varInput = form.querySelector('input[name="variation_id"]');
+    const variationId = varInput && varInput.value && parseInt(varInput.value, 10) > 0
+      ? varInput.value
+      : null;
+    return { productId, quantity, variationId };
+  }
+
+  // Ask WordPress to sign the payload with the current selection.
+  async function signOnServer({ productId, quantity, variationId }) {
+    const body = new URLSearchParams();
+    body.set('action', 'pimp_sign_add_to_cart');
+    body.set('product_id', productId);
+    body.set('quantity', String(quantity));
+    if (variationId) body.set('variation_id', variationId);
+    const resp = await fetch(cfg.ajaxUrl, {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: body.toString(),
+    });
+    const json = await resp.json();
+    if (!json || !json.success) {
+      const message = (json && json.data && json.data.message) || 'sign failed';
+      throw new Error(message);
+    }
+    return json.data;
+  }
+
+  // Resume an in-flight add after Auth0 redirect roundtrip.
   (async () => {
     const qs = window.location.search;
     if (qs.includes('code=') && qs.includes('state=')) {
@@ -37,7 +71,10 @@
         const pending = sessionStorage.getItem('pimp_pending');
         if (pending) {
           sessionStorage.removeItem('pimp_pending');
-          await addToPimp(JSON.parse(pending));
+          // Re-sign at the resumed click time so the timestamp is fresh.
+          const sel = JSON.parse(pending);
+          const fresh = await signOnServer(sel);
+          await addToPimp(fresh);
         }
       } catch (e) {
         console.error('[pimp-cart] callback error', e);
@@ -75,13 +112,8 @@
     if (!btn) return;
     e.preventDefault();
 
-    let payload;
-    try {
-      payload = JSON.parse(btn.dataset.payload);
-    } catch (err) {
-      console.error('[pimp-cart] bad payload', err);
-      return;
-    }
+    const sel = readSelection(btn);
+    if (!sel.productId) return;
 
     btn.disabled = true;
     setStatus(btn, 'Ajout en cours…', 'pending');
@@ -90,14 +122,18 @@
       const client = await getAuth0();
       const isAuthenticated = await client.isAuthenticated();
       if (!isAuthenticated) {
-        sessionStorage.setItem('pimp_pending', JSON.stringify(payload));
+        // Save the selection (not the signed payload) so we re-sign post-redirect.
+        sessionStorage.setItem('pimp_pending', JSON.stringify(sel));
         await client.loginWithRedirect({
           appState: { returnTo: window.location.pathname },
         });
         return;
       }
-      await addToPimp(payload);
-      setStatus(btn, 'Ajouté à votre panier Pimp ✓', 'success');
+      const signed = await signOnServer(sel);
+      await addToPimp(signed);
+      const label = signed.variation_label ? ' (' + signed.variation_label.replace(/<[^>]+>/g, '') + ')' : '';
+      const qty = signed.quantity > 1 ? ' ×' + signed.quantity : '';
+      setStatus(btn, 'Ajouté à votre panier Pimp ✓' + qty + label, 'success');
     } catch (err) {
       console.error('[pimp-cart]', err);
       setStatus(btn, 'Erreur: ' + err.message, 'error');

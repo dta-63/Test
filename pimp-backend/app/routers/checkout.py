@@ -10,7 +10,7 @@ from ..models import CartItem, PimpOrder, PimpOrderItem, User
 from ..schemas import CheckoutIn, CheckoutOrder, CheckoutResult
 from ..shop_sync import notify_active_products
 from ..websockets import manager
-from ..woocommerce import WooCommerceError, create_order
+from ..woocommerce import WooCommerceError, create_order, line_item_for
 
 router = APIRouter()
 
@@ -40,7 +40,7 @@ async def checkout(
             results.append(CheckoutOrder(site_id=site_id, status="failed", error=f"Unknown site {site_id}"))
             continue
 
-        line_items = [{"product_id": int(i.product_id), "quantity": i.quantity} for i in site_items]
+        line_items = [line_item_for(i.product_id, i.variation_id, i.quantity) for i in site_items]
         try:
             order = await create_order(shop, line_items, billing, shipping=shipping, customer_note=payload.customer_note)
         except WooCommerceError as e:

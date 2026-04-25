@@ -5,12 +5,14 @@ from pydantic import BaseModel, ConfigDict, Field
 
 class CartItemIn(BaseModel):
     product_id: str = Field(min_length=1, max_length=64)
+    variation_id: str | None = Field(default=None, max_length=64)
+    variation_label: str | None = Field(default=None, max_length=255)
     product_name: str = Field(min_length=1, max_length=255)
     product_url: str = Field(min_length=1, max_length=1024)
     image_url: str | None = Field(default=None, max_length=1024)
     price: float = Field(ge=0)
     currency: str = Field(default="EUR", max_length=8)
-    quantity: int = Field(default=1, ge=1)
+    quantity: int = Field(default=1, ge=1, le=99)
     # Signed fields from the WordPress plugin:
     site_id: str = Field(min_length=1, max_length=32)
     site_signature: str = Field(min_length=1)
@@ -22,6 +24,8 @@ class CartItemOut(BaseModel):
     id: int
     site_id: str
     product_id: str
+    variation_id: str | None
+    variation_label: str | None
     product_name: str
     product_url: str
     image_url: str | None

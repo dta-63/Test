@@ -80,7 +80,14 @@ def add_item(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> CartItem:
-    assert_site_signature(payload.site_id, payload.site_timestamp, payload.product_id, payload.site_signature)
+    assert_site_signature(
+        payload.site_id,
+        payload.site_timestamp,
+        payload.product_id,
+        payload.variation_id,
+        payload.quantity,
+        payload.site_signature,
+    )
 
     existing = (
         db.query(CartItem)
@@ -88,6 +95,7 @@ def add_item(
             CartItem.user_id == user.id,
             CartItem.site_id == payload.site_id,
             CartItem.product_id == payload.product_id,
+            CartItem.variation_id == payload.variation_id,
         )
         .one_or_none()
     )
@@ -103,6 +111,8 @@ def add_item(
         user_id=user.id,
         site_id=payload.site_id,
         product_id=payload.product_id,
+        variation_id=payload.variation_id,
+        variation_label=payload.variation_label,
         product_name=payload.product_name,
         product_url=payload.product_url,
         image_url=payload.image_url,

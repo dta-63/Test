@@ -62,6 +62,7 @@ export interface PreviewResult {
 }
 
 export interface IntentOut {
+  payment_intent_id: string;
   client_secret: string;
   publishable_key: string;
   amount: number;
@@ -88,24 +89,17 @@ export class CheckoutService {
     });
   }
 
-  createIntent(billing: BillingInfo, shipping?: ShippingAddress): Observable<IntentOut> {
+  createIntent(billing: BillingInfo, shipping?: ShippingAddress, customerNote?: string): Observable<IntentOut> {
     return this.http.post<IntentOut>(`${this.base}/payment/intent`, {
       billing,
       shipping: shipping ?? null,
+      customer_note: customerNote || null,
     });
   }
 
-  confirmPayment(
-    paymentIntentId: string,
-    billing: BillingInfo,
-    shipping?: ShippingAddress,
-    customerNote?: string,
-  ): Observable<CheckoutResult> {
+  confirmPayment(paymentIntentId: string): Observable<CheckoutResult> {
     return this.http.post<CheckoutResult>(`${this.base}/payment/confirm`, {
       payment_intent_id: paymentIntentId,
-      billing,
-      shipping: shipping ?? null,
-      customer_note: customerNote || null,
     });
   }
 }

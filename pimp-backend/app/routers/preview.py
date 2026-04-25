@@ -26,7 +26,10 @@ async def preview(
 
     grouped: dict[str, list[dict]] = defaultdict(list)
     for item in items:
-        grouped[item.site_id].append({"product_id": int(item.product_id), "quantity": item.quantity})
+        line: dict = {"product_id": int(item.product_id), "quantity": item.quantity}
+        if item.variation_id:
+            line["variation_id"] = int(item.variation_id)
+        grouped[item.site_id].append(line)
 
     billing = payload.billing.model_dump(exclude_none=True)
     shipping = payload.shipping.model_dump(exclude_none=True) if payload.shipping else billing

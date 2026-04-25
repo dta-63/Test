@@ -126,15 +126,20 @@ def verify_site_signature(site_id: str, timestamp: int, signature: str) -> None:
     _ = key, signature
 
 
-def compute_site_signature(site_id: str, timestamp: int, product_id: str) -> str:
+def compute_site_signature(
+    site_id: str, timestamp: int, product_id: str, variation_id: str | None, quantity: int,
+) -> str:
     key = settings.site_keys.get(site_id, "")
-    msg = f"{site_id}.{timestamp}.{product_id}".encode()
+    var = variation_id or "0"
+    msg = f"{site_id}.{timestamp}.{product_id}.{var}.{quantity}".encode()
     return hmac.new(key.encode(), msg, hashlib.sha256).hexdigest()
 
 
-def assert_site_signature(site_id: str, timestamp: int, product_id: str, signature: str) -> None:
+def assert_site_signature(
+    site_id: str, timestamp: int, product_id: str, variation_id: str | None, quantity: int, signature: str,
+) -> None:
     verify_site_signature(site_id, timestamp, signature)
-    expected = compute_site_signature(site_id, timestamp, product_id)
+    expected = compute_site_signature(site_id, timestamp, product_id, variation_id, quantity)
     if not hmac.compare_digest(expected, signature):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Bad site signature")
 

@@ -33,6 +33,12 @@ final class Pimp_Cart_Plugin {
         // Order tracking (status changes) -> Pimp.
         add_action('woocommerce_order_status_changed', [__CLASS__, 'on_order_status_changed'], 20, 4);
 
+        // AJAX endpoint that signs the actual quantity + variation chosen by the
+        // user at click time (avoids stale render-time signatures and lets the
+        // signed payload carry the quantity input + variation_id).
+        add_action('wp_ajax_pimp_sign_add_to_cart',        [__CLASS__, 'ajax_sign']);
+        add_action('wp_ajax_nopriv_pimp_sign_add_to_cart', [__CLASS__, 'ajax_sign']);
+
         Pimp_REST::boot();
     }
 
@@ -61,34 +67,70 @@ final class Pimp_Cart_Plugin {
             return;
         }
 
-        $timestamp = time();
+        // The button only carries the product_id; quantity and variation are
+        // read from the page at click time and signed via AJAX.
         $product_id = (string) $product->get_id();
-        $signature  = hash_hmac('sha256', "{$c['site_id']}.{$timestamp}.{$product_id}", $c['site_key']);
-
-        $image_id  = $product->get_image_id();
-        $image_url = $image_id ? wp_get_attachment_image_url($image_id, 'medium') : '';
-
-        $payload = [
-            'product_id'     => $product_id,
-            'product_name'   => $product->get_name(),
-            'product_url'    => get_permalink($product->get_id()),
-            'image_url'      => $image_url ?: null,
-            'price'          => (float) $product->get_price(),
-            'currency'       => get_woocommerce_currency(),
-            'quantity'       => 1,
-            'site_id'        => $c['site_id'],
-            'site_timestamp' => $timestamp,
-            'site_signature' => $signature,
-        ];
         ?>
         <button
             type="button"
             class="pimp-add-to-cart button alt"
-            data-payload='<?php echo esc_attr(wp_json_encode($payload)); ?>'>
+            data-product-id="<?php echo esc_attr($product_id); ?>">
             Ajouter à mon panier Pimp
         </button>
         <span class="pimp-status" aria-live="polite"></span>
         <?php
+    }
+
+    public static function ajax_sign(): void {
+        $c = self::constants();
+        if (!$c['site_id'] || !$c['site_key']) {
+            wp_send_json_error(['message' => 'Plugin not configured'], 500);
+        }
+        $product_id = isset($_POST['product_id']) ? (int) $_POST['product_id'] : 0;
+        $variation_id = isset($_POST['variation_id']) ? (int) $_POST['variation_id'] : 0;
+        $quantity = isset($_POST['quantity']) ? max(1, min(99, (int) $_POST['quantity'])) : 1;
+
+        $product = wc_get_product($variation_id > 0 ? $variation_id : $product_id);
+        if (!$product instanceof WC_Product) {
+            wp_send_json_error(['message' => 'Unknown product'], 404);
+        }
+        if (!$product->is_purchasable() || !$product->is_in_stock()) {
+            wp_send_json_error(['message' => 'Produit indisponible'], 409);
+        }
+
+        // For variations, get_id() returns the variation id; we want both.
+        $effective_pid = $variation_id > 0 ? (string) $variation_id : (string) $product_id;
+        $variation_label = '';
+        if ($variation_id > 0 && method_exists($product, 'get_attribute_summary')) {
+            $variation_label = wc_get_formatted_variation($product, true);
+        }
+
+        $image_id = $product->get_image_id();
+        if (!$image_id && $product->get_parent_id()) {
+            $parent = wc_get_product($product->get_parent_id());
+            $image_id = $parent ? $parent->get_image_id() : 0;
+        }
+        $image_url = $image_id ? wp_get_attachment_image_url($image_id, 'medium') : '';
+
+        $timestamp = time();
+        $variation_for_sig = $variation_id > 0 ? (string) $variation_id : '0';
+        $msg = "{$c['site_id']}.{$timestamp}.{$product_id}.{$variation_for_sig}.{$quantity}";
+        $signature = hash_hmac('sha256', $msg, $c['site_key']);
+
+        wp_send_json_success([
+            'product_id'      => (string) $product_id,
+            'variation_id'    => $variation_id > 0 ? (string) $variation_id : null,
+            'variation_label' => $variation_label ?: null,
+            'product_name'    => $product->get_name(),
+            'product_url'     => get_permalink($variation_id > 0 ? $product->get_parent_id() : $product_id),
+            'image_url'       => $image_url ?: null,
+            'price'           => (float) $product->get_price(),
+            'currency'        => get_woocommerce_currency(),
+            'quantity'        => $quantity,
+            'site_id'         => $c['site_id'],
+            'site_timestamp'  => $timestamp,
+            'site_signature'  => $signature,
+        ]);
     }
 
     public static function enqueue(): void {
@@ -114,6 +156,7 @@ final class Pimp_Cart_Plugin {
 
         wp_localize_script('pimp-cart', 'PIMP_CART_CFG', [
             'apiUrl'       => $c['api_url'],
+            'ajaxUrl'      => admin_url('admin-ajax.php'),
             'auth0Domain'  => $c['auth0_domain'],
             'auth0Client'  => $c['auth0_client'],
             'auth0Audience'=> $c['auth0_aud'],

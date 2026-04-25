@@ -277,6 +277,7 @@ export class CheckoutDialogComponent implements AfterViewInit, OnDestroy {
   stripeError: string | null = null;
   private stripeElements: StripeElements | null = null;
   private paymentElement: StripePaymentElement | null = null;
+  private paymentIntentId: string | null = null;
 
   constructor() {
     this.stripeMode = !!this.cfg.config()?.stripe_enabled;
@@ -336,8 +337,9 @@ export class CheckoutDialogComponent implements AfterViewInit, OnDestroy {
     const cfg = this.cfg.config();
     if (!cfg?.stripe_enabled) return;
     try {
-      this.api.createIntent(this.billing, this.shipping).subscribe({
+      this.api.createIntent(this.billing, this.shipping, this.customerNote).subscribe({
         next: async (intent) => {
+          this.paymentIntentId = intent.payment_intent_id;
           const stripe = await this.stripeSvc.ensure(intent.publishable_key);
           this.stripeElements = stripe.elements({ clientSecret: intent.client_secret });
           this.paymentElement = this.stripeElements.create('payment');
@@ -391,7 +393,8 @@ export class CheckoutDialogComponent implements AfterViewInit, OnDestroy {
         this.stripeError = `Paiement non finalisé (${pi?.status ?? 'inconnu'})`;
         return;
       }
-      this.api.confirmPayment(pi.id, this.billing, this.shipping, this.customerNote).subscribe({
+      const intentId = this.paymentIntentId ?? pi.id;
+      this.api.confirmPayment(intentId).subscribe({
         next: (r) => this.handleResult(r),
         error: (e) => this.handleError(e),
       });

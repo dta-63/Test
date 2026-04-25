@@ -34,6 +34,7 @@ import { CheckoutDialogComponent } from './checkout-dialog.component';
             <div class="body">
               <span class="chip">{{ item.site_id === 'site-a' ? 'Shop A' : 'Shop B' }}</span>
               <h3><a [href]="item.product_url" target="_blank" rel="noopener">{{ item.product_name }}</a></h3>
+              <div *ngIf="item.variation_label" class="variation" [innerHTML]="item.variation_label"></div>
               <div class="meta">
                 <span>{{ item.price | currency: item.currency }}</span>
                 <span>×{{ item.quantity }}</span>
@@ -83,6 +84,7 @@ import { CheckoutDialogComponent } from './checkout-dialog.component';
     h3 { margin: 0; font-size: 16px; }
     h3 a { color: inherit; text-decoration: none; }
     h3 a:hover { color: var(--pimp-primary); }
+    .variation { font-size: 12px; color: var(--pimp-muted); }
     .meta { display: flex; gap: 10px; align-items: baseline; font-size: 13px; color: var(--pimp-muted); flex-wrap: wrap; }
     .date { margin-left: auto; }
     .total {

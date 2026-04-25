@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Integer, Numeric, String, UniqueConstraint, func
+from sqlalchemy import JSON, DateTime, ForeignKey, Integer, Numeric, String, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .database import Base
@@ -19,12 +19,14 @@ class User(Base):
 
 class CartItem(Base):
     __tablename__ = "cart_items"
-    __table_args__ = (UniqueConstraint("user_id", "site_id", "product_id", name="uq_user_site_product"),)
+    __table_args__ = (UniqueConstraint("user_id", "site_id", "product_id", "variation_id", name="uq_user_site_product_variation"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
     site_id: Mapped[str] = mapped_column(String(32), index=True)
     product_id: Mapped[str] = mapped_column(String(64))
+    variation_id: Mapped[str | None] = mapped_column(String(64), nullable=True, default=None)
+    variation_label: Mapped[str | None] = mapped_column(String(255), nullable=True, default=None)
     product_name: Mapped[str] = mapped_column(String(255))
     product_url: Mapped[str] = mapped_column(String(1024))
     image_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
@@ -35,6 +37,29 @@ class CartItem(Base):
     expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
 
     user: Mapped[User] = relationship(back_populates="cart_items")
+
+
+class PaymentSnapshot(Base):
+    """Locks the cart total at PaymentIntent creation so /confirm is idempotent
+    and the WC orders are created with the same total Stripe charged.
+
+    `site_breakdown` is a JSON map {site_id: {total, shipping_total, tax_total,
+    subtotal, line_items: [{product_id, variation_id, quantity}]}}.
+    `result_json` is the CheckoutResult returned by the first successful confirm.
+    """
+    __tablename__ = "payment_snapshots"
+
+    payment_intent_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    total_amount_minor: Mapped[int] = mapped_column(Integer)
+    currency: Mapped[str] = mapped_column(String(8))
+    site_breakdown: Mapped[dict] = mapped_column(JSON)
+    billing: Mapped[dict] = mapped_column(JSON)
+    shipping: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    customer_note: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    result_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
 
 class PimpOrder(Base):
