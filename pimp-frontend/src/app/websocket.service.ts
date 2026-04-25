@@ -1,6 +1,6 @@
 import { Injectable, inject } from '@angular/core';
 import { AuthService } from '@auth0/auth0-angular';
-import { filter, from, switchMap, take } from 'rxjs';
+import { firstValueFrom } from 'rxjs';
 
 import { CartStore } from './cart.store';
 import { env } from './env';
@@ -12,6 +12,7 @@ interface ServerEvent {
   product_id?: string;
   reason?: string;
   user_id?: number;
+  items?: { product_name?: string }[];
 }
 
 @Injectable({ providedIn: 'root' })
@@ -24,11 +25,9 @@ export class WebSocketService {
   private reconnectDelay = 1000;
   private stopped = false;
 
-  start(): void {
+  async start(): Promise<void> {
     this.stopped = false;
-    this.auth.isAuthenticated$
-      .pipe(filter(Boolean), take(1), switchMap(() => from(this.auth.getAccessTokenSilently())))
-      .subscribe((token) => this.connect(token));
+    await this.connect();
   }
 
   stop(): void {
@@ -37,8 +36,24 @@ export class WebSocketService {
     this.socket = null;
   }
 
-  private connect(token: string): void {
+  /**
+   * Always fetches a fresh token before connecting. This matters on reconnect:
+   * the token captured an hour ago is expired, and the server returns 1008.
+   * `getAccessTokenSilently()` either returns the cached token or refreshes
+   * via the refresh-token flow.
+   */
+  private async connect(): Promise<void> {
     if (this.stopped) return;
+
+    let token: string;
+    try {
+      const isAuth = await firstValueFrom(this.auth.isAuthenticated$);
+      if (!isAuth) return;
+      token = await firstValueFrom(this.auth.getAccessTokenSilently());
+    } catch {
+      this.scheduleReconnect();
+      return;
+    }
 
     const url = new URL(env.apiUrl);
     url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -62,12 +77,16 @@ export class WebSocketService {
 
     socket.addEventListener('close', () => {
       this.socket = null;
-      if (this.stopped) return;
-      setTimeout(() => this.connect(token), this.reconnectDelay);
-      this.reconnectDelay = Math.min(this.reconnectDelay * 2, 30_000);
+      this.scheduleReconnect();
     });
 
     socket.addEventListener('error', () => socket.close());
+  }
+
+  private scheduleReconnect(): void {
+    if (this.stopped) return;
+    setTimeout(() => this.connect(), this.reconnectDelay);
+    this.reconnectDelay = Math.min(this.reconnectDelay * 2, 30_000);
   }
 
   private handle(event: ServerEvent): void {
@@ -88,6 +107,16 @@ export class WebSocketService {
         );
         this.cart.refresh();
         return;
+      case 'cart.items_expired': {
+        const n = event.items?.length ?? 0;
+        const sample = event.items?.[0]?.product_name;
+        const msg = n === 1 && sample
+          ? `« ${sample} » a expiré et a été retiré de votre panier.`
+          : `${n} article(s) ont expiré et ont été retirés de votre panier.`;
+        this.notif.push(msg, 'warning');
+        this.cart.refresh();
+        return;
+      }
       case 'cart.checked_out':
         this.cart.refresh();
         return;

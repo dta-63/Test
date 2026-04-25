@@ -111,7 +111,7 @@ export class AppComponent implements OnInit, OnDestroy {
     this.cfg.load();
     this.sub = this.auth.isAuthenticated$.subscribe((ok) => {
       if (ok) {
-        this.ws.start();
+        void this.ws.start();
         this.me.load();
       } else {
         this.ws.stop();

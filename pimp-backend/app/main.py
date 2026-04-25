@@ -1,13 +1,31 @@
+import asyncio
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .config import settings
 from .database import Base, engine
+from .reconcile import reconcile_loop
 from .routers import account, b2b, cart, checkout, payment, preview, webhooks, ws
 
 Base.metadata.create_all(bind=engine)
 
-app = FastAPI(title="Pimp API", version="0.1.0")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    task = asyncio.create_task(reconcile_loop())
+    try:
+        yield
+    finally:
+        task.cancel()
+        try:
+            await task
+        except (asyncio.CancelledError, Exception):
+            pass
+
+
+app = FastAPI(title="Pimp API", version="0.1.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,

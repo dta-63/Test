@@ -117,6 +117,18 @@ class PreviewIn(BaseModel):
     shipping: ShippingAddress | None = None
 
 
+class PreviewItem(BaseModel):
+    product_id: int
+    variation_id: int | None = None
+    name: str
+    quantity: int
+    unit_price: float
+    subtotal: float
+    available: bool
+    reason: str | None = None
+    stock_left: int | None = None
+
+
 class PreviewSite(BaseModel):
     site_id: str
     currency: str
@@ -126,6 +138,8 @@ class PreviewSite(BaseModel):
     tax_total: float
     total: float
     coupons_applied: list[str] = []
+    items: list[PreviewItem] = []
+    all_available: bool = True
     error: str | None = None
 
 
@@ -133,3 +147,5 @@ class PreviewResult(BaseModel):
     sites: list[PreviewSite]
     grand_total: float
     currency: str
+    currency_mismatch: bool = False
+    all_available: bool = True

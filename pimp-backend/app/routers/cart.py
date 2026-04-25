@@ -9,6 +9,7 @@ from ..database import get_db
 from ..models import CartItem, User
 from ..schemas import CartItemIn, CartItemOut, CartView
 from ..shop_sync import notify_active_products
+from ..websockets import manager
 
 router = APIRouter()
 
@@ -19,7 +20,7 @@ def _ttl() -> datetime | None:
     return datetime.now(timezone.utc) + timedelta(seconds=settings.cart_ttl_seconds)
 
 
-def _purge_expired(db: Session, user_id: int) -> list[tuple[str, str]]:
+def _purge_expired(db: Session, user_id: int) -> tuple[list[tuple[str, str]], list[dict]]:
     now = datetime.now(timezone.utc)
     expired = (
         db.query(CartItem)
@@ -27,12 +28,20 @@ def _purge_expired(db: Session, user_id: int) -> list[tuple[str, str]]:
         .all()
     )
     if not expired:
-        return []
+        return [], []
     pairs = [(i.site_id, i.product_id) for i in expired]
+    info = [
+        {"site_id": i.site_id, "product_id": i.product_id, "product_name": i.product_name}
+        for i in expired
+    ]
     for i in expired:
         db.delete(i)
     db.commit()
-    return pairs
+    return pairs, info
+
+
+async def _notify_expired(user_id: int, items: list[dict]) -> None:
+    await manager.send_to_users([user_id], {"type": "cart.items_expired", "items": items})
 
 
 def _no_longer_referenced(db: Session, pairs: list[tuple[str, str]]) -> list[tuple[str, str]]:
@@ -63,9 +72,10 @@ def get_cart(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> CartView:
-    expired = _purge_expired(db, user.id)
-    if expired:
-        _schedule_forget(background, _no_longer_referenced(db, expired))
+    expired_pairs, expired_info = _purge_expired(db, user.id)
+    if expired_pairs:
+        _schedule_forget(background, _no_longer_referenced(db, expired_pairs))
+        background.add_task(_notify_expired, user.id, expired_info)
 
     items = db.query(CartItem).filter(CartItem.user_id == user.id).order_by(CartItem.added_at.desc()).all()
     total = sum(float(i.price) * i.quantity for i in items)

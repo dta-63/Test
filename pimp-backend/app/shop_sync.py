@@ -66,6 +66,19 @@ async def notify_active_products(site_id: str, touch: list[str], forget: list[st
         logger.warning("active-products sync to %s failed: %s", site_id, e)
 
 
+async def replace_active_products(site_id: str, product_ids: list[str]) -> None:
+    """Full reconciliation: replace the plugin's active-products table with
+    exactly this set. Used by the periodic reconciler."""
+    try:
+        await _post(
+            site_id,
+            "/wp-json/pimp/v1/active-products",
+            {"replace": [str(p) for p in product_ids]},
+        )
+    except Exception as e:
+        logger.warning("active-products replace on %s failed: %s", site_id, e)
+
+
 async def cart_preview(
     site_id: str,
     line_items: list[dict[str, Any]],

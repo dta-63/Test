@@ -157,6 +157,8 @@ final class Pimp_Cart_Plugin {
         wp_localize_script('pimp-cart', 'PIMP_CART_CFG', [
             'apiUrl'       => $c['api_url'],
             'ajaxUrl'      => admin_url('admin-ajax.php'),
+            'siteId'       => $c['site_id'],
+            'pimpUrl'      => 'http://pimp.localhost',
             'auth0Domain'  => $c['auth0_domain'],
             'auth0Client'  => $c['auth0_client'],
             'auth0Audience'=> $c['auth0_aud'],

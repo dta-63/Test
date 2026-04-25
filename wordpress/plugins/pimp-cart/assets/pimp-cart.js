@@ -71,7 +71,6 @@
         const pending = sessionStorage.getItem('pimp_pending');
         if (pending) {
           sessionStorage.removeItem('pimp_pending');
-          // Re-sign at the resumed click time so the timestamp is fresh.
           const sel = JSON.parse(pending);
           const fresh = await signOnServer(sel);
           await addToPimp(fresh);
@@ -80,6 +79,7 @@
         console.error('[pimp-cart] callback error', e);
       }
     }
+    checkAlreadyInCart();
   })();
 
   async function addToPimp(payload) {
@@ -107,6 +107,39 @@
     status.dataset.kind = kind || '';
   }
 
+  // Toggles the button to an "already in cart" state with a link to the SaaS.
+  function markAsInCart(btn, item) {
+    btn.dataset.inCart = '1';
+    const variation = item.variation_label ? ' (' + item.variation_label.replace(/<[^>]+>/g, '') + ')' : '';
+    btn.textContent = '✓ Déjà dans votre panier Pimp ×' + item.quantity + variation;
+    const status = btn.parentElement.querySelector('.pimp-status');
+    if (status) {
+      status.innerHTML = ' <a href="' + cfg.pimpUrl + '" target="_blank" rel="noopener">Voir le panier</a>';
+    }
+  }
+
+  async function checkAlreadyInCart() {
+    const btn = document.querySelector('.pimp-add-to-cart');
+    if (!btn) return;
+    try {
+      const client = await getAuth0();
+      if (!(await client.isAuthenticated())) return;
+      const token = await client.getTokenSilently();
+      const res = await fetch(cfg.apiUrl + '/api/cart', {
+        headers: { Authorization: 'Bearer ' + token },
+      });
+      if (!res.ok) return;
+      const cart = await res.json();
+      const productId = btn.dataset.productId;
+      const found = cart.items.find(
+        (i) => i.site_id === cfg.siteId && String(i.product_id) === String(productId),
+      );
+      if (found) markAsInCart(btn, found);
+    } catch (e) {
+      // Silently ignore — this is a UX hint, not critical.
+    }
+  }
+
   document.addEventListener('click', async function (e) {
     const btn = e.target.closest('.pimp-add-to-cart');
     if (!btn) return;
@@ -130,10 +163,13 @@
         return;
       }
       const signed = await signOnServer(sel);
-      await addToPimp(signed);
+      const result = await addToPimp(signed);
       const label = signed.variation_label ? ' (' + signed.variation_label.replace(/<[^>]+>/g, '') + ')' : '';
       const qty = signed.quantity > 1 ? ' ×' + signed.quantity : '';
       setStatus(btn, 'Ajouté à votre panier Pimp ✓' + qty + label, 'success');
+      // Switch the button to the "already in cart" state immediately so the
+      // user sees they don't need to click again.
+      markAsInCart(btn, result);
     } catch (err) {
       console.error('[pimp-cart]', err);
       setStatus(btn, 'Erreur: ' + err.message, 'error');

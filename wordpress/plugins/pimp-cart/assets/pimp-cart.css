@@ -18,6 +18,18 @@
   cursor: wait;
 }
 
+.pimp-add-to-cart[data-in-cart="1"] {
+  background: #047857 !important;
+  cursor: default;
+}
+.pimp-add-to-cart[data-in-cart="1"]:hover {
+  background: #065f46 !important;
+}
+.pimp-status a {
+  color: #7c3aed;
+  text-decoration: underline;
+}
+
 .pimp-status {
   display: inline-block;
   margin-left: 10px;

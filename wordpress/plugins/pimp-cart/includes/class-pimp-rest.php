@@ -47,6 +47,13 @@ final class Pimp_REST {
 
     public static function active_products(WP_REST_Request $req): WP_REST_Response {
         $params = $req->get_json_params() ?: [];
+        // `replace` (full set) is used by Pimp's reconciliation loop. When
+        // present, it overrides touch/forget and resets the table to the
+        // exact set Pimp considers active.
+        if (array_key_exists('replace', $params) && is_array($params['replace'])) {
+            Pimp_Storage::replace_all($params['replace']);
+            return new WP_REST_Response(['ok' => true, 'mode' => 'replace', 'count' => count($params['replace'])], 200);
+        }
         $touch  = is_array($params['touch']  ?? null) ? $params['touch']  : [];
         $forget = is_array($params['forget'] ?? null) ? $params['forget'] : [];
         Pimp_Storage::touch($touch);
@@ -63,13 +70,8 @@ final class Pimp_REST {
         $billing    = is_array($params['billing']    ?? null) ? $params['billing']    : [];
         $shipping   = is_array($params['shipping']   ?? null) ? $params['shipping']   : [];
 
-        // WC_Cart relies on session + customer; instantiate a clean one for this preview.
-        if (!WC()->session) {
-            WC()->initialize_session();
-        }
-        if (!WC()->customer) {
-            WC()->initialize_customer();
-        }
+        if (!WC()->session)  WC()->initialize_session();
+        if (!WC()->customer) WC()->initialize_customer();
         $customer = WC()->customer;
         if ($shipping) {
             $customer->set_shipping_country($shipping['country']  ?? 'FR');
@@ -86,21 +88,52 @@ final class Pimp_REST {
         $cart = new WC_Cart();
         $cart->empty_cart();
         $items_out = [];
+        $all_available = true;
+
         foreach ($line_items as $li) {
             $pid = isset($li['product_id']) ? (int) $li['product_id'] : 0;
-            $qty = isset($li['quantity'])   ? max(1, (int) $li['quantity']) : 1;
+            $vid = isset($li['variation_id']) ? (int) $li['variation_id'] : 0;
+            $qty = isset($li['quantity']) ? max(1, (int) $li['quantity']) : 1;
             if ($pid <= 0) continue;
-            $key = $cart->add_to_cart($pid, $qty);
-            if ($key) {
-                $product = wc_get_product($pid);
-                $items_out[] = [
-                    'product_id' => $pid,
-                    'name'       => $product ? $product->get_name() : '',
-                    'quantity'   => $qty,
-                    'unit_price' => $product ? (float) $product->get_price() : 0.0,
-                    'subtotal'   => $product ? (float) $product->get_price() * $qty : 0.0,
-                ];
+
+            $effective_id = $vid > 0 ? $vid : $pid;
+            $product = wc_get_product($effective_id);
+
+            $available = false;
+            $reason = null;
+            if (!$product) {
+                $reason = 'unknown_product';
+            } elseif (!$product->is_purchasable()) {
+                $reason = 'not_purchasable';
+            } elseif (!$product->is_in_stock()) {
+                $reason = 'out_of_stock';
+            } elseif ($product->managing_stock() && $product->get_stock_quantity() !== null && $product->get_stock_quantity() < $qty) {
+                $reason = 'insufficient_stock';
+            } else {
+                $available = true;
             }
+
+            if ($available) {
+                if ($vid > 0) {
+                    $cart->add_to_cart($pid, $qty, $vid);
+                } else {
+                    $cart->add_to_cart($pid, $qty);
+                }
+            } else {
+                $all_available = false;
+            }
+
+            $items_out[] = [
+                'product_id'   => $pid,
+                'variation_id' => $vid > 0 ? $vid : null,
+                'name'         => $product ? $product->get_name() : '',
+                'quantity'     => $qty,
+                'unit_price'   => $product ? (float) $product->get_price() : 0.0,
+                'subtotal'     => $product && $available ? (float) $product->get_price() * $qty : 0.0,
+                'available'    => $available,
+                'reason'       => $reason,
+                'stock_left'   => $product && $product->managing_stock() ? (int) ($product->get_stock_quantity() ?? 0) : null,
+            ];
         }
         $cart->calculate_totals();
 
@@ -113,6 +146,7 @@ final class Pimp_REST {
             'tax_total'        => (float) $cart->get_total_tax(),
             'total'            => (float) wc_format_decimal($cart->get_total('edit'), 2),
             'coupons_applied'  => array_values($cart->get_applied_coupons()),
+            'all_available'    => $all_available,
         ];
         $cart->empty_cart();
         return new WP_REST_Response($response, 200);

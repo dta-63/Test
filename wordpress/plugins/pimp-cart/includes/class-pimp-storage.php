@@ -60,4 +60,16 @@ final class Pimp_Storage {
         $found = $wpdb->get_var($wpdb->prepare("SELECT 1 FROM {$table} WHERE product_id = %d LIMIT 1", $product_id));
         return (bool) $found;
     }
+
+    /**
+     * Replace the entire active-products set with the provided list. Used by
+     * Pimp's periodic reconciliation to recover from drift (lost updates,
+     * shop downtime, etc.).
+     */
+    public static function replace_all(array $product_ids): void {
+        global $wpdb;
+        $table = self::table();
+        $wpdb->query("DELETE FROM {$table}");
+        self::touch($product_ids);
+    }
 }

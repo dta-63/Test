@@ -137,7 +137,25 @@ function emptyShipping(): ShippingAddress {
               <span *ngIf="s.error" class="err">Indisponible: {{ s.error }}</span>
             </li>
           </ul>
-          <div class="grand-total">
+          <div *ngIf="preview.currency_mismatch" class="warning">
+            Attention : votre panier contient des devises mélangées. Le paiement
+            unifié n'est pas possible — retirez ou regroupez par devise.
+          </div>
+          <div *ngIf="!preview.all_available" class="warning">
+            Certains articles ne sont pas disponibles à la commande :
+            <ul class="unavail">
+              <li *ngFor="let s of preview.sites">
+                <ng-container *ngFor="let it of s.items">
+                  <ng-container *ngIf="!it.available">
+                    <span class="chip" [attr.data-site]="s.site_id">{{ s.site_id === 'site-a' ? 'Shop A' : 'Shop B' }}</span>
+                    {{ it.name }} — {{ availabilityLabel(it.reason) }}
+                  </ng-container>
+                </ng-container>
+              </li>
+            </ul>
+            Retirez-les avant de continuer.
+          </div>
+          <div class="grand-total" *ngIf="!preview.currency_mismatch && preview.all_available">
             Total à payer
             <strong>{{ preview.grand_total | currency: preview.currency }}</strong>
           </div>
@@ -160,7 +178,8 @@ function emptyShipping(): ShippingAddress {
 
         <footer>
           <button class="btn-ghost" (click)="step = 'address'" [disabled]="loading">Retour</button>
-          <button class="btn-primary" (click)="payAndConfirm()" [disabled]="loading || !stripeReady && stripeMode">
+          <button class="btn-primary" (click)="payAndConfirm()"
+                  [disabled]="loading || !canPay()">
             {{ loading ? 'Paiement…' : (stripeMode ? 'Payer et commander' : 'Confirmer la commande') }}
           </button>
         </footer>
@@ -320,7 +339,8 @@ export class CheckoutDialogComponent implements AfterViewInit, OnDestroy {
         this.preview = p;
         this.step = 'payment';
         this.loading = false;
-        if (this.stripeMode) {
+        const canIntent = !p.currency_mismatch && p.all_available;
+        if (this.stripeMode && canIntent) {
           this.startStripe();
         } else {
           this.stripeReady = true;
@@ -422,5 +442,21 @@ export class CheckoutDialogComponent implements AfterViewInit, OnDestroy {
 
   onCancel(): void {
     this.closed.emit();
+  }
+
+  canPay(): boolean {
+    if (this.stripeMode && !this.stripeReady) return false;
+    if (this.preview && (this.preview.currency_mismatch || !this.preview.all_available)) return false;
+    return true;
+  }
+
+  availabilityLabel(reason: string | null): string {
+    switch (reason) {
+      case 'out_of_stock': return 'rupture de stock';
+      case 'insufficient_stock': return 'stock insuffisant';
+      case 'not_purchasable': return 'non disponible à la vente';
+      case 'unknown_product': return 'produit introuvable';
+      default: return 'indisponible';
+    }
   }
 }

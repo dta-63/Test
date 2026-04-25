@@ -43,6 +43,18 @@ export interface CheckoutResult {
   fully_succeeded: boolean;
 }
 
+export interface PreviewItem {
+  product_id: number;
+  variation_id: number | null;
+  name: string;
+  quantity: number;
+  unit_price: number;
+  subtotal: number;
+  available: boolean;
+  reason: string | null;
+  stock_left: number | null;
+}
+
 export interface PreviewSite {
   site_id: string;
   currency: string;
@@ -52,6 +64,8 @@ export interface PreviewSite {
   tax_total: number;
   total: number;
   coupons_applied: string[];
+  items: PreviewItem[];
+  all_available: boolean;
   error: string | null;
 }
 
@@ -59,6 +73,8 @@ export interface PreviewResult {
   sites: PreviewSite[];
   grand_total: number;
   currency: string;
+  currency_mismatch: boolean;
+  all_available: boolean;
 }
 
 export interface IntentOut {

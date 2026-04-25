@@ -92,7 +92,8 @@ async def create_intent(
     # Ask every shop for its authoritative total so the Stripe amount matches.
     site_breakdown: dict[str, dict[str, Any]] = {}
     grand_total = 0.0
-    currency = "EUR"
+    seen_currencies: set[str] = set()
+    unavailable: list[dict[str, Any]] = []
     for site_id, site_items in grouped.items():
         line_items = []
         for i in site_items:
@@ -116,10 +117,25 @@ async def create_intent(
             "currency": preview.get("currency", "EUR"),
         }
         grand_total += site_breakdown[site_id]["total"]
-        currency = preview.get("currency", currency)
+        seen_currencies.add(preview.get("currency", "EUR"))
+        for it in preview.get("items") or []:
+            if not it.get("available"):
+                unavailable.append({"site_id": site_id, **it})
 
+    if unavailable:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            {"error": "items_unavailable", "items": unavailable},
+        )
+    if len(seen_currencies) > 1:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            {"error": "currency_mismatch", "currencies": sorted(seen_currencies)},
+        )
     if grand_total <= 0:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Total invalide")
+
+    currency = next(iter(seen_currencies), "EUR")
 
     amount_minor = _to_minor(grand_total, currency)
 

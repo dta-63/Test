@@ -37,6 +37,10 @@ class Settings(BaseSettings):
     # Cart validity (TTL). Items older than this are dropped at fetch time.
     cart_ttl_seconds: int = 60 * 60 * 24 * 7  # 7 days
 
+    # Periodic full sync of the plugin-side pimp_active_products table.
+    # Set to 0 to disable.
+    active_products_reconcile_seconds: int = 60 * 60  # 1 hour
+
     # Stripe (PSP) for unified checkout. Test keys are fine for the demo.
     stripe_secret_key: str = ""
     stripe_publishable_key: str = ""
