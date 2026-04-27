@@ -10,6 +10,16 @@ import { CheckoutDialogComponent } from './checkout-dialog.component';
   standalone: true,
   imports: [NgIf, NgFor, AsyncPipe, CurrencyPipe, DatePipe, CheckoutDialogComponent],
   template: `
+    <ng-container *ngIf="auth.isLoading$ | async">
+      <div class="skeleton-wrap">
+        <div class="skeleton title"></div>
+        <div class="skeleton-grid">
+          <div class="skeleton card-ghost" *ngFor="let i of [1,2,3]"></div>
+        </div>
+      </div>
+    </ng-container>
+
+    <ng-container *ngIf="!(auth.isLoading$ | async)">
     <ng-container *ngIf="auth.isAuthenticated$ | async; else notLogged">
       <section *ngIf="cart$ | async as cart; else loading">
         <div class="header-row">
@@ -62,6 +72,7 @@ import { CheckoutDialogComponent } from './checkout-dialog.component';
         <p>Connectez-vous pour consulter votre panier unifié depuis Shop A et Shop B.</p>
       </div>
     </ng-template>
+    </ng-container>
 
     <app-checkout-dialog *ngIf="checkoutOpen" (closed)="checkoutOpen = false"></app-checkout-dialog>
   `,
@@ -96,6 +107,17 @@ import { CheckoutDialogComponent } from './checkout-dialog.component';
     .total .muted { color: var(--pimp-muted); font-size: 13px; }
     .total strong { font-size: 20px; }
     .welcome { background: white; padding: 48px; border-radius: 12px; text-align: center; }
+    .skeleton-wrap { padding-top: 4px; }
+    .skeleton {
+      background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+      background-size: 200% 100%;
+      animation: shimmer 1.2s infinite;
+      border-radius: 8px;
+    }
+    @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+    .skeleton.title { height: 32px; width: 200px; margin-bottom: 24px; }
+    .skeleton-grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); }
+    .skeleton.card-ghost { height: 260px; border-radius: 12px; }
   `],
 })
 export class CartComponent {

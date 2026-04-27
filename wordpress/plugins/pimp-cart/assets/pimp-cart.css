@@ -1,29 +1,16 @@
-.pimp-add-to-cart {
-  background: #7c3aed !important;
-  color: #ffffff !important;
-  border: none !important;
-  padding: 10px 18px !important;
-  margin-left: 10px !important;
-  border-radius: 6px !important;
-  font-weight: 600 !important;
-  cursor: pointer !important;
+/* Wrap the WC form actions + Pimp button side by side */
+.woocommerce-variation-add-to-cart,
+.cart {
+  display: flex !important;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
 }
 
-.pimp-add-to-cart:hover {
-  background: #5b21b6 !important;
-}
-
-.pimp-add-to-cart[disabled] {
-  opacity: 0.6;
-  cursor: wait;
-}
-
-.pimp-add-to-cart[data-in-cart="1"] {
-  background: #047857 !important;
-  cursor: default;
-}
-.pimp-add-to-cart[data-in-cart="1"]:hover {
-  background: #065f46 !important;
+.pimp-status {
+  flex-basis: 100%;
+  font-size: .85rem;
+  min-height: 1.2em;
 }
 .pimp-status a {
   color: #7c3aed;

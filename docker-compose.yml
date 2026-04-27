@@ -135,7 +135,7 @@ services:
       - ./wordpress/plugins/pimp-cart:/var/www/html/wp-content/plugins/pimp-cart
       - ./wordpress/init:/init
     entrypoint: ["/bin/sh", "/init/setup.sh"]
-    command: ["shop-a", "Shop A - Electronics", "#1e3a8a", "electronics"]
+    command: ["shop-a", "Maison Lumière", "#db2777", "fashion-a"]
     networks:
       - pimp-net
 
@@ -196,7 +196,7 @@ services:
       - ./wordpress/plugins/pimp-cart:/var/www/html/wp-content/plugins/pimp-cart
       - ./wordpress/init:/init
     entrypoint: ["/bin/sh", "/init/setup.sh"]
-    command: ["shop-b", "Shop B - Fashion", "#be185d", "fashion"]
+    command: ["shop-b", "Urban Drop", "#7c3aed", "fashion-b"]
     networks:
       - pimp-net
 

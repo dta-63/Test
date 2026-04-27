@@ -17,9 +17,15 @@ final class Pimp_Cart_Plugin {
 
     public static function boot(): void {
         register_activation_hook(__FILE__, [Pimp_Storage::class, 'install']);
+        register_activation_hook(__FILE__, [__CLASS__, 'flush_rewrites']);
         // Also run on every load (cheap CREATE TABLE IF NOT EXISTS) so the
         // demo init flow that auto-activates the plugin gets the table.
         add_action('plugins_loaded', [Pimp_Storage::class, 'install']);
+
+        // Auth0 callback endpoint: /auth/callback
+        add_action('init', [__CLASS__, 'register_auth_rewrite']);
+        add_filter('query_vars', [__CLASS__, 'add_query_vars']);
+        add_action('template_redirect', [__CLASS__, 'handle_auth_callback']);
 
         add_action('woocommerce_after_add_to_cart_button', [__CLASS__, 'render_button']);
         add_action('wp_enqueue_scripts', [__CLASS__, 'enqueue']);
@@ -40,6 +46,64 @@ final class Pimp_Cart_Plugin {
         add_action('wp_ajax_nopriv_pimp_sign_add_to_cart', [__CLASS__, 'ajax_sign']);
 
         Pimp_REST::boot();
+    }
+
+    public static function register_auth_rewrite(): void {
+        add_rewrite_rule('^auth/callback/?$', 'index.php?pimp_auth_callback=1', 'top');
+    }
+
+    public static function add_query_vars(array $vars): array {
+        $vars[] = 'pimp_auth_callback';
+        return $vars;
+    }
+
+    public static function flush_rewrites(): void {
+        self::register_auth_rewrite();
+        flush_rewrite_rules();
+    }
+
+    /**
+     * Serve a minimal Auth0 callback page at /auth/callback.
+     * Handles the code exchange then redirects to appState.returnTo (the product page).
+     */
+    public static function handle_auth_callback(): void {
+        if (!get_query_var('pimp_auth_callback')) {
+            return;
+        }
+        $c = self::constants();
+        $domain    = esc_js($c['auth0_domain']);
+        $client_id = esc_js($c['auth0_client']);
+        $audience  = esc_js($c['auth0_aud']);
+        $redirect  = esc_js(home_url('/auth/callback'));
+        ?>
+<!DOCTYPE html>
+<html lang="fr">
+<head><meta charset="utf-8"><title>Connexion Pimp…</title>
+<style>body{font-family:system-ui,sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;color:#6b7280}</style>
+</head>
+<body><p>Connexion en cours…</p>
+<script src="https://cdn.auth0.com/js/auth0-spa-js/2.1/auth0-spa-js.production.js"></script>
+<script>
+(async () => {
+  try {
+    const client = await window.auth0.createAuth0Client({
+      domain: '<?php echo $domain; ?>',
+      clientId: '<?php echo $client_id; ?>',
+      authorizationParams: { redirect_uri: '<?php echo $redirect; ?>', audience: '<?php echo $audience; ?>' },
+      cacheLocation: 'localstorage',
+      useRefreshTokens: true,
+    });
+    const { appState } = await client.handleRedirectCallback();
+    window.location.replace((appState && appState.returnTo) || '/');
+  } catch (e) {
+    console.error('[pimp-cart] auth callback error', e);
+    window.location.replace('/');
+  }
+})();
+</script>
+</body></html>
+        <?php
+        exit;
     }
 
     private static function constants(): array {
@@ -69,13 +133,15 @@ final class Pimp_Cart_Plugin {
 
         // The button only carries the product_id; quantity and variation are
         // read from the page at click time and signed via AJAX.
+        // Classes mirror WC's own single product button so the theme sizes them identically.
+        // pimp-add-to-cart is kept for JS targeting and CSS overrides.
         $product_id = (string) $product->get_id();
         ?>
         <button
             type="button"
-            class="pimp-add-to-cart button alt"
+            class="pimp-add-to-cart single_add_to_cart_button button alt wp-element-button"
             data-product-id="<?php echo esc_attr($product_id); ?>">
-            Ajouter à mon panier Pimp
+            Ajouter à Pimp
         </button>
         <span class="pimp-status" aria-live="polite"></span>
         <?php
@@ -149,10 +215,10 @@ final class Pimp_Cart_Plugin {
             'pimp-cart',
             plugins_url('assets/pimp-cart.js', __FILE__),
             ['auth0-spa-js'],
-            '0.2.0',
+            (string) filemtime(__DIR__ . '/assets/pimp-cart.js'),
             true,
         );
-        wp_register_style('pimp-cart', plugins_url('assets/pimp-cart.css', __FILE__), [], '0.2.0');
+        wp_register_style('pimp-cart', plugins_url('assets/pimp-cart.css', __FILE__), [], (string) filemtime(__DIR__ . '/assets/pimp-cart.css'));
 
         wp_localize_script('pimp-cart', 'PIMP_CART_CFG', [
             'apiUrl'       => $c['api_url'],

@@ -20,7 +20,8 @@ _ISSUER = f"https://{settings.auth0_domain}/"
 def _jwks() -> dict:
     # Cached for the lifetime of the process; Auth0 rotates keys rarely.
     # Restart the service after a rotation.
-    resp = httpx.get(_JWKS_URL, timeout=10.0)
+    # verify=False: corporate proxy uses a self-signed cert in the chain.
+    resp = httpx.get(_JWKS_URL, timeout=10.0, verify=False)
     resp.raise_for_status()
     return resp.json()
 

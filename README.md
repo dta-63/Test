@@ -105,7 +105,7 @@ C'est la commande unique. Elle :
 - build les images backend/frontend,
 - démarre Traefik, Postgres, 2× MariaDB, 2× WordPress,
 - seed automatiquement WooCommerce avec des produits de démo,
-- applique un style différent à chaque site (bleu / electronics, rose / fashion).
+- applique la couleur accent propre à chaque site.
 
 Premier démarrage : ~2-3 min (WP + Woo + seed).
 
@@ -115,9 +115,8 @@ Premier démarrage : ~2-3 min (WP + Woo + seed).
 | ----------------- | ---------------------------------- | ------------------- |
 | Pimp SaaS         | http://pimp.localhost              | via Auth0           |
 | Pimp API (OpenAPI)| http://api.pimp.localhost/docs     | -                   |
-| Shop A            | http://shop-a.localhost            | admin / admin       |
-| Shop B            | http://shop-b.localhost            | admin / admin       |
-| Traefik dashboard | http://localhost:8080              | -                   |
+| Shop A (Maison Lumière) | http://shop-a.localhost            | admin / admin       |
+| Shop B (Urban Drop)     | http://shop-b.localhost            | admin / admin       |
 
 ## Parcours utilisateur
 

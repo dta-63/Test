@@ -22,7 +22,7 @@ export const appConfig: ApplicationConfig = {
         domain: auth0Domain,
         clientId: auth0ClientId,
         authorizationParams: {
-          redirect_uri: window.location.origin,
+          redirect_uri: `${window.location.origin}/auth/callback`,
           audience: env.auth0Audience,
         },
         httpInterceptor: {

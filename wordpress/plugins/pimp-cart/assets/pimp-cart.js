@@ -15,7 +15,7 @@
           domain: cfg.auth0Domain,
           clientId: cfg.auth0Client,
           authorizationParams: {
-            redirect_uri: window.location.href,
+            redirect_uri: window.location.origin + '/auth/callback',
             audience: cfg.auth0Audience,
           },
           cacheLocation: 'localstorage',
@@ -59,24 +59,32 @@
     return json.data;
   }
 
-  // Resume an in-flight add after Auth0 redirect roundtrip.
+  // Resume an in-flight add when returning from the /auth/callback redirect.
+  // appState.returnTo brings the user back to the product page; the plugin
+  // then picks up pimp_pending from sessionStorage and completes the add.
   (async () => {
-    const qs = window.location.search;
-    if (qs.includes('code=') && qs.includes('state=')) {
-      const client = await getAuth0();
+    const pending = sessionStorage.getItem('pimp_pending');
+    if (pending) {
+      const btn = document.querySelector('.pimp-add-to-cart');
       try {
-        const { appState } = await client.handleRedirectCallback();
-        const target = (appState && appState.returnTo) || window.location.pathname;
-        window.history.replaceState({}, document.title, target);
-        const pending = sessionStorage.getItem('pimp_pending');
-        if (pending) {
+        const client = await getAuth0();
+        if (await client.isAuthenticated()) {
           sessionStorage.removeItem('pimp_pending');
           const sel = JSON.parse(pending);
+          if (btn) { btn.disabled = true; setStatus(btn, 'Ajout en cours…', 'pending'); }
           const fresh = await signOnServer(sel);
-          await addToPimp(fresh);
+          const result = await addToPimp(fresh);
+          if (btn) {
+            const label = fresh.variation_label ? ' (' + fresh.variation_label.replace(/<[^>]+>/g, '') + ')' : '';
+            const qty = fresh.quantity > 1 ? ' ×' + fresh.quantity : '';
+            setStatus(btn, 'Ajouté à votre panier Pimp ✓' + qty + label, 'success');
+            markAsInCart(btn, result);
+            btn.disabled = false;
+          }
         }
       } catch (e) {
-        console.error('[pimp-cart] callback error', e);
+        console.error('[pimp-cart] resume error', e);
+        if (btn) { btn.disabled = false; setStatus(btn, 'Erreur: ' + e.message, 'error'); }
       }
     }
     checkAlreadyInCart();
@@ -155,10 +163,10 @@
       const client = await getAuth0();
       const isAuthenticated = await client.isAuthenticated();
       if (!isAuthenticated) {
-        // Save the selection (not the signed payload) so we re-sign post-redirect.
+        // Save the selection so we re-sign after returning from /auth/callback.
         sessionStorage.setItem('pimp_pending', JSON.stringify(sel));
         await client.loginWithRedirect({
-          appState: { returnTo: window.location.pathname },
+          appState: { returnTo: window.location.href },
         });
         return;
       }

@@ -70,8 +70,15 @@ final class Pimp_REST {
         $billing    = is_array($params['billing']    ?? null) ? $params['billing']    : [];
         $shipping   = is_array($params['shipping']   ?? null) ? $params['shipping']   : [];
 
-        if (!WC()->session)  WC()->initialize_session();
-        if (!WC()->customer) WC()->initialize_customer();
+        // Boot WC session + customer for this (non-frontend) REST request.
+        if (!WC()->session) {
+            $session_class = apply_filters('woocommerce_session_handler', 'WC_Session_Handler');
+            WC()->session = new $session_class();
+            WC()->session->init();
+        }
+        if (!WC()->customer) {
+            WC()->customer = new WC_Customer(0, true);
+        }
         $customer = WC()->customer;
         if ($shipping) {
             $customer->set_shipping_country($shipping['country']  ?? 'FR');
