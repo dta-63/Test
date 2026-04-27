@@ -7,7 +7,7 @@ ARG AUTH0_AUDIENCE
 ARG API_URL
 
 COPY package.json package-lock.json* ./
-RUN npm install --no-audit --no-fund
+RUN npm config set strict-ssl false && npm install --no-audit --no-fund
 
 COPY . .
 

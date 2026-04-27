@@ -262,8 +262,8 @@ export class B2bDashboardComponent {
   private ordersTrigger$ = new Subject<OrdersFilters>();
   private searchInput$ = new Subject<string>();
 
-  data = toSignal(this.dashboardTrigger$.pipe(switchMap((f) => this.api.getDashboard(f))), { initialValue: null as Dashboard | null });
-  orders = toSignal(this.ordersTrigger$.pipe(switchMap((f) => this.api.listOrders(f))), { initialValue: null as OrdersPage | null });
+  data = toSignal<Dashboard | null>(this.dashboardTrigger$.pipe(switchMap((f) => this.api.getDashboard(f))), { initialValue: null });
+  orders = toSignal<OrdersPage | null>(this.ordersTrigger$.pipe(switchMap((f) => this.api.listOrders(f))), { initialValue: null });
 
   constructor() {
     this.searchInput$.pipe(debounceTime(250), distinctUntilChanged()).subscribe((v) => {
