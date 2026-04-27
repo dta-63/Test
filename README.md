@@ -256,6 +256,28 @@ docker compose run --rm shop-b-init
 
 Pour repartir totalement à zéro : `make clean && make up`.
 
+### « WooCommerce n'apparaît pas dans wp-admin »
+
+Symptôme typique d'un environnement avec proxy/SSL d'entreprise qui bloque
+le téléchargement depuis `downloads.wordpress.org` (WP utilise PHP cURL avec
+le trust store par défaut, qui ne contient pas la CA du proxy intercepteur).
+`setup.sh` retente automatiquement avec `wp plugin install --insecure` si
+le premier essai échoue. L'install de WC est aussi devenue idempotente et
+indépendante du flag `pimp_demo_ready`, donc ré-exécuter suffit :
+
+```bash
+docker compose run --rm shop-a-init
+docker compose run --rm shop-b-init
+```
+
+Si même `--insecure` échoue (proxy qui bloque carrément les requêtes
+sortantes), le script affiche `!!! could not install 'woocommerce' — check
+network/proxy/HTTPS trust.` et sort en code 1. Solutions :
+1. Rendre `downloads.wordpress.org` joignable depuis les containers (proxy
+   d'entreprise transparent ou liste blanche)
+2. Pré-télécharger `woocommerce.zip` localement et le copier dans le bind
+   mount, puis `wp plugin install /var/www/html/woocommerce.zip --activate`
+
 ### « Le bouton Pimp sur la fiche produit n'apparaît pas »
 
 Vérifie que tu es bien sur une page produit (`/product/{slug}/`) et pas sur

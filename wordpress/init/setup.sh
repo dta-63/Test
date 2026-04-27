@@ -34,13 +34,53 @@ if ! wp --allow-root core is-installed 2>/dev/null; then
 fi
 
 # ---------------------------------------------------------------------------
-# Stage 1: heavy demo content (one-shot, guarded by pimp_demo_ready).
+# Helpers
+# ---------------------------------------------------------------------------
+
+# Install a plugin from wordpress.org with a fallback that ignores SSL trust
+# (corporate proxies that intercept HTTPS commonly break the default download).
+install_plugin_from_org() {
+  slug="$1"
+  if wp --allow-root plugin is-installed "$slug" 2>/dev/null; then return 0; fi
+  echo "[init:$SLUG] downloading plugin '$slug' from wordpress.org..."
+  if wp --allow-root plugin install "$slug"; then return 0; fi
+  echo "[init:$SLUG] download failed; retrying with --insecure (corp SSL trust workaround)..."
+  if wp --allow-root plugin install "$slug" --insecure; then return 0; fi
+  echo "[init:$SLUG] !!! could not install '$slug' — check network/proxy/HTTPS trust." >&2
+  return 1
+}
+
+ensure_woocommerce_active() {
+  if wp --allow-root plugin is-active woocommerce 2>/dev/null; then return 0; fi
+  if ! install_plugin_from_org woocommerce; then
+    return 1
+  fi
+  echo "[init:$SLUG] activating WooCommerce..."
+  wp --allow-root plugin activate woocommerce
+}
+
+ensure_pimp_cart_active() {
+  # pimp-cart ships in /wp-content/plugins/pimp-cart via a bind mount;
+  # `wp plugin activate` is idempotent.
+  wp --allow-root plugin activate pimp-cart >/dev/null 2>&1 || true
+}
+
+# ---------------------------------------------------------------------------
+# Stage 1A: ensure plugins are installed + active. Idempotent, runs every time.
+# This is split out from the heavy seed so that even if a previous run set
+# pimp_demo_ready=1 without WC actually being active (e.g. SSL failure), we
+# self-heal on next start.
+# ---------------------------------------------------------------------------
+if ! ensure_woocommerce_active; then
+  echo "[init:$SLUG] WooCommerce not active — aborting setup. Fix the network and re-run." >&2
+  exit 1
+fi
+ensure_pimp_cart_active
+
+# ---------------------------------------------------------------------------
+# Stage 1B: heavy demo content (one-shot, guarded by pimp_demo_ready).
 # ---------------------------------------------------------------------------
 if [ "$(wp --allow-root option get pimp_demo_ready 2>/dev/null)" != "1" ]; then
-  echo "[init:$SLUG] installing WooCommerce..."
-  wp --allow-root plugin install woocommerce --activate
-  wp --allow-root plugin activate pimp-cart || true
-
   # Skip Woo setup wizard and seed store.
   wp --allow-root option update woocommerce_store_address "1 rue de la Démo"
   wp --allow-root option update woocommerce_store_city "Paris"
@@ -68,27 +108,17 @@ if [ "$(wp --allow-root option get pimp_demo_ready 2>/dev/null)" != "1" ]; then
     wp --allow-root wc --user=admin product create --name="Webcam 1080p"           --type=simple --regular_price=89.00  --description="Autofocus, micro stéréo intégré."           --status=publish --catalog_visibility=visible --manage_stock=false
   fi
 
-  # Per-site styling via custom CSS injected by the mu-plugin.
   CSS=".site-header, .woocommerce-store-notice { background: ${ACCENT} !important; color: #fff !important; }
 a.button, button.button, .woocommerce a.button, .woocommerce button.button.alt, .woocommerce #respond input#submit.alt { background: ${ACCENT} !important; color: #fff !important; }
 .woocommerce-product-gallery { border: 2px solid ${ACCENT}; padding: 4px; }
 .price { color: ${ACCENT} !important; font-weight: 700 !important; }
 body { font-family: $( [ "$CATALOG" = "fashion" ] && echo 'Georgia, serif' || echo 'system-ui, sans-serif' ); }"
 
-  # Storefront has a battle-tested classic theme integration with WooCommerce
-  # and a navigation menu out of the box. Fall back to twentytwentyone (also
-  # classic) if Storefront install fails (offline build), then to whatever is
-  # currently active.
-  wp --allow-root theme install storefront --activate \
-    || wp --allow-root theme install twentytwentyone --activate \
-    || true
-
   wp --allow-root option update blogname "$TITLE"
   wp --allow-root option update blogdescription "Démo e-commerce ($CATALOG) connectée à Pimp"
   wp --allow-root option update pimp_site_accent "$ACCENT"
   wp --allow-root option update pimp_site_custom_css "$CSS"
 
-  # WooCommerce REST API key for Pimp checkout (deterministic).
   PIMP_CK="${PIMP_WC_CONSUMER_KEY:-ck_pimp_${SLUG}}"
   PIMP_CS="${PIMP_WC_CONSUMER_SECRET:-cs_pimp_${SLUG}_secret}"
   echo "[init:$SLUG] seeding WooCommerce REST API key for Pimp..."
@@ -113,7 +143,6 @@ fi
 
 # ---------------------------------------------------------------------------
 # Stage 2: idempotent fixups — always run on container start, safe to repeat.
-# This is what makes shop-a.localhost actually land you on a product listing.
 # ---------------------------------------------------------------------------
 
 # Pretty permalinks: /product/{slug}/, /shop/, /cart/, /my-account/.
@@ -131,11 +160,10 @@ wp --allow-root wc --user=admin tool run install_pages >/dev/null 2>&1 || true
 # archive via template_redirect.
 wp --allow-root theme activate twentytwentyone >/dev/null 2>&1 \
   || wp --allow-root theme install twentytwentyone --activate >/dev/null 2>&1 \
+  || wp --allow-root theme install twentytwentyone --activate --insecure >/dev/null 2>&1 \
   || true
 
-# Set the WooCommerce Shop page as the home page so the user lands on the
-# product list directly. Without this, http://shop-x.localhost shows the
-# default WP "Hello World" page and users can't find the products.
+# Set the WooCommerce Shop page as the home page.
 SHOP_PAGE_ID=$(wp --allow-root option get woocommerce_shop_page_id 2>/dev/null || echo "")
 case "$SHOP_PAGE_ID" in
   ''|*[!0-9]*) SHOP_PAGE_ID=0 ;;
@@ -145,14 +173,12 @@ if [ "$SHOP_PAGE_ID" -gt 0 ] 2>/dev/null; then
   wp --allow-root option update page_on_front "$SHOP_PAGE_ID"
 fi
 
-# Build a small primary menu (Shop / Cart / My account) so users can move
-# between sections. Classic theme only; block themes ignore this safely.
+# Primary menu (Shop / Cart / My account). Classic theme only.
 if ! wp --allow-root menu list --fields=name 2>/dev/null | grep -q '^Pimp$'; then
   wp --allow-root menu create "Pimp" >/dev/null 2>&1 || true
 fi
 CART_PAGE_ID=$(wp --allow-root option get woocommerce_cart_page_id 2>/dev/null || echo 0)
 ACCOUNT_PAGE_ID=$(wp --allow-root option get woocommerce_myaccount_page_id 2>/dev/null || echo 0)
-# add-post is idempotent thanks to wp's de-duplication on the menu name.
 [ "$SHOP_PAGE_ID"    -gt 0 ] 2>/dev/null && wp --allow-root menu item add-post Pimp "$SHOP_PAGE_ID"    --title="Boutique"   >/dev/null 2>&1 || true
 [ "$CART_PAGE_ID"    -gt 0 ] 2>/dev/null && wp --allow-root menu item add-post Pimp "$CART_PAGE_ID"    --title="Panier"     >/dev/null 2>&1 || true
 [ "$ACCOUNT_PAGE_ID" -gt 0 ] 2>/dev/null && wp --allow-root menu item add-post Pimp "$ACCOUNT_PAGE_ID" --title="Mon compte" >/dev/null 2>&1 || true
