@@ -123,6 +123,16 @@ wp --allow-root rewrite structure '/%postname%/' --hard >/dev/null 2>&1 || true
 # Make sure the WC pages exist (recreate if dropped). Idempotent.
 wp --allow-root wc --user=admin tool run install_pages >/dev/null 2>&1 || true
 
+# Force a classic theme. Block themes (twentytwentyfour, etc.) ship a
+# front-page.html template that takes precedence over `page_on_front`, so
+# setting the WC Shop page as the home page silently does nothing. The
+# classic theme twentytwentyone is bundled with WP and renders the
+# configured page_on_front normally; WC then overrides with the product
+# archive via template_redirect.
+wp --allow-root theme activate twentytwentyone >/dev/null 2>&1 \
+  || wp --allow-root theme install twentytwentyone --activate >/dev/null 2>&1 \
+  || true
+
 # Set the WooCommerce Shop page as the home page so the user lands on the
 # product list directly. Without this, http://shop-x.localhost shows the
 # default WP "Hello World" page and users can't find the products.

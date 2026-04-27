@@ -218,6 +218,51 @@ make logs     # suit les logs
 make ps       # liste les containers
 ```
 
+## Troubleshooting
+
+### « Rien ne se passe quand je clique sur Se connecter »
+
+Le SaaS est buildé avec des placeholders vides depuis `.env.example`, donc
+le client Auth0 ne peut pas s'initialiser. Une bannière jaune doit s'afficher
+en haut de la page si c'est ton cas.
+
+```bash
+# 1. Crée un tenant Auth0 (gratuit) :
+#    - API : Identifier = https://api.pimp.localhost
+#    - Application SPA : récupérer le Client ID
+#    - Allowed Callback / Logout / Web Origins URLs :
+#      http://pimp.localhost, http://shop-a.localhost, http://shop-b.localhost
+# 2. Renseigne .env :
+sed -i 's|AUTH0_DOMAIN=.*|AUTH0_DOMAIN=ton-tenant.eu.auth0.com|' .env
+sed -i 's|AUTH0_SPA_CLIENT_ID=.*|AUTH0_SPA_CLIENT_ID=xxxxxxxxxxxx|' .env
+# 3. Rebuild les services qui embarquent ces vars :
+docker compose up -d --build pimp-frontend pimp-backend
+```
+
+### « http://shop-{a,b}.localhost ne montre pas la liste des produits »
+
+Le thème par défaut WP 6.6 (twentytwentyfour) est un *block theme* qui
+contient un `front-page.html` et ignore `page_on_front`. Le `setup.sh` force
+maintenant l'activation de twentytwentyone (thème classique livré avec WP)
+puis pointe la home sur la page Shop. Pour appliquer ce fix sur une démo
+déjà lancée :
+
+```bash
+docker compose run --rm shop-a-init
+docker compose run --rm shop-b-init
+```
+
+(seules les fixups idempotentes du Stage 2 vont tourner — quelques secondes).
+
+Pour repartir totalement à zéro : `make clean && make up`.
+
+### « Le bouton Pimp sur la fiche produit n'apparaît pas »
+
+Vérifie que tu es bien sur une page produit (`/product/{slug}/`) et pas sur
+la liste. Le hook `woocommerce_after_add_to_cart_button` n'existe que sur
+la fiche produit individuelle. Si la page produit n'est pas accessible,
+applique d'abord la fix de la section précédente.
+
 ## Structure
 
 ```

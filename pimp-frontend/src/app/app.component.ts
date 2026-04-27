@@ -4,6 +4,7 @@ import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { AuthService } from '@auth0/auth0-angular';
 import { Subscription } from 'rxjs';
 
+import { env, isAuth0Configured } from './env';
 import { MeService } from './me.service';
 import { NotificationsService } from './notifications.service';
 import { PublicConfigService } from './public-config.service';
@@ -14,6 +15,16 @@ import { WebSocketService } from './websocket.service';
   standalone: true,
   imports: [RouterOutlet, RouterLink, RouterLinkActive, NgIf, NgFor, AsyncPipe],
   template: `
+    <div *ngIf="!auth0Configured" class="config-banner" role="alert">
+      <strong>Auth0 non configuré.</strong>
+      Le bouton "Se connecter" ne fait rien tant que vous n'avez pas créé un
+      tenant Auth0 et renseigné <code>AUTH0_DOMAIN</code>,
+      <code>AUTH0_API_AUDIENCE</code> et <code>AUTH0_SPA_CLIENT_ID</code> dans
+      le fichier <code>.env</code>, puis rebuild :
+      <code>docker compose up -d --build pimp-frontend pimp-backend</code>.
+      Voir la section "Démarrage" du README.
+    </div>
+
     <header class="topbar">
       <a class="brand" routerLink="/">
         <span class="logo">P</span>
@@ -30,7 +41,7 @@ import { WebSocketService } from './websocket.service';
           <button class="btn-ghost" (click)="logout()">Se déconnecter</button>
         </ng-container>
         <ng-template #loginBtn>
-          <button class="btn-primary" (click)="login()">Se connecter</button>
+          <button class="btn-primary" (click)="login()" [disabled]="!auth0Configured">Se connecter</button>
         </ng-template>
       </nav>
     </header>
@@ -44,6 +55,15 @@ import { WebSocketService } from './websocket.service';
     </div>
   `,
   styles: [`
+    .config-banner {
+      background: #fef3c7; color: #92400e;
+      border-bottom: 1px solid #fcd34d;
+      padding: 12px 24px; font-size: 14px; line-height: 1.5;
+    }
+    .config-banner code {
+      background: rgba(0,0,0,0.06); padding: 1px 6px;
+      border-radius: 4px; font-size: 12px;
+    }
     .topbar {
       display: flex; align-items: center; justify-content: space-between;
       padding: 16px 32px; background: white;
@@ -105,9 +125,20 @@ export class AppComponent implements OnInit, OnDestroy {
   private cfg = inject(PublicConfigService);
   private ws = inject(WebSocketService);
 
+  readonly auth0Configured = isAuth0Configured();
+
   private sub?: Subscription;
 
   ngOnInit(): void {
+    if (!this.auth0Configured) {
+      console.error(
+        '[Pimp] Auth0 is not configured. Got domain=%s clientId=%s. ' +
+        'Create a .env from .env.example, fill AUTH0_* vars, then ' +
+        'docker compose up -d --build pimp-frontend pimp-backend.',
+        env.auth0Domain, env.auth0ClientId,
+      );
+      return;
+    }
     this.cfg.load();
     this.sub = this.auth.isAuthenticated$.subscribe((ok) => {
       if (ok) {
