@@ -92,7 +92,7 @@ services:
       - pimp-net
 
   shop-a:
-    image: wordpress:6.6-php8.3-apache
+    image: wordpress:6.8-php8.3-apache
     environment:
       WORDPRESS_DB_HOST: shop-a-db
       WORDPRESS_DB_USER: wordpress
@@ -153,7 +153,7 @@ services:
       - pimp-net
 
   shop-b:
-    image: wordpress:6.6-php8.3-apache
+    image: wordpress:6.8-php8.3-apache
     environment:
       WORDPRESS_DB_HOST: shop-b-db
       WORDPRESS_DB_USER: wordpress

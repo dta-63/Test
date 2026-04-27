@@ -34,6 +34,22 @@ if ! wp --allow-root core is-installed 2>/dev/null; then
 fi
 
 # ---------------------------------------------------------------------------
+# Self-heal WordPress core when the image is bumped past the persisted volume.
+# Volumes outlive image upgrades (the wordpress image's docker-entrypoint
+# refuses to overwrite an existing wp-includes), so a fresh `wordpress:6.8`
+# image still serves files from a `wordpress:6.6` volume. WooCommerce 9.x
+# refuses to install on WP < 6.8, hence this step.
+# ---------------------------------------------------------------------------
+WP_VER=$(wp --allow-root core version 2>/dev/null | awk -F. '{printf "%d%02d%02d", $1, $2, $3}')
+if [ "${WP_VER:-0}" -lt 60800 ] 2>/dev/null; then
+  echo "[init:$SLUG] WP files on volume are $(wp --allow-root core version 2>/dev/null) — upgrading core..."
+  wp --allow-root core update --insecure 2>/dev/null \
+    || wp --allow-root core update 2>/dev/null \
+    || echo "[init:$SLUG] !!! WP core update failed; check network/proxy" >&2
+  wp --allow-root core update-db 2>/dev/null || true
+fi
+
+# ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 

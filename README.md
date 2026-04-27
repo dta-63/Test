@@ -258,12 +258,35 @@ Pour repartir totalement à zéro : `make clean && make up`.
 
 ### « WooCommerce n'apparaît pas dans wp-admin »
 
-Symptôme typique d'un environnement avec proxy/SSL d'entreprise qui bloque
-le téléchargement depuis `downloads.wordpress.org` (WP utilise PHP cURL avec
-le trust store par défaut, qui ne contient pas la CA du proxy intercepteur).
-`setup.sh` retente automatiquement avec `wp plugin install --insecure` si
-le premier essai échoue. L'install de WC est aussi devenue idempotente et
-indépendante du flag `pimp_demo_ready`, donc ré-exécuter suffit :
+Deux causes possibles :
+
+**1. WP trop vieux (`Minimum WordPress requirement is 6.8`)**
+
+Les volumes Docker survivent aux upgrades d'image : un volume créé avec
+`wordpress:6.6` reste à 6.6 même après bump à `wordpress:6.8` car le
+docker-entrypoint refuse d'écraser un `wp-includes` existant. WooCommerce
+9.x exige WP ≥ 6.8.
+
+`setup.sh` détecte maintenant cette désynchro et lance `wp core update`
+automatiquement. Pour appliquer :
+
+```bash
+docker compose run --rm shop-a-init
+docker compose run --rm shop-b-init
+```
+
+Tu verras dans les logs `WP files on volume are 6.6.x — upgrading core...`
+puis le téléchargement et l'install. Si l'upgrade échoue (proxy/SSL),
+la solution radicale est `make clean && make up` qui repart d'un volume
+neuf déjà à la bonne version.
+
+**2. Proxy/SSL d'entreprise**
+
+Si l'env intercepte le HTTPS, le téléchargement depuis
+`downloads.wordpress.org` peut échouer. `setup.sh` retente automatiquement
+avec `wp plugin install --insecure` (idem pour `core update`).
+L'install est idempotente et indépendante du flag `pimp_demo_ready`,
+donc ré-exécuter suffit :
 
 ```bash
 docker compose run --rm shop-a-init
