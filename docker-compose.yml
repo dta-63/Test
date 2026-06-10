@@ -11,72 +11,83 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     networks:
-      - pimp-net
+      - kapyo-net
 
-  # ---------- Pimp SaaS (Angular + FastAPI + Postgres) ----------
-  pimp-db:
+  # ---------- Kapyo SaaS (Angular + FastAPI + Postgres) ----------
+  kapyo-db:
     image: postgres:16-alpine
     environment:
-      POSTGRES_USER: ${PIMP_DB_USER:-pimp}
-      POSTGRES_PASSWORD: ${PIMP_DB_PASSWORD:-pimp}
-      POSTGRES_DB: ${PIMP_DB_NAME:-pimp}
+      POSTGRES_USER: ${KAPYO_DB_USER:-kapyo}
+      POSTGRES_PASSWORD: ${KAPYO_DB_PASSWORD:-kapyo}
+      POSTGRES_DB: ${KAPYO_DB_NAME:-kapyo}
     volumes:
-      - pimp-db-data:/var/lib/postgresql/data
+      - kapyo-db-data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${PIMP_DB_USER:-pimp}"]
+      test: ["CMD-SHELL", "pg_isready -U ${KAPYO_DB_USER:-kapyo}"]
       interval: 5s
       timeout: 5s
       retries: 10
     networks:
-      - pimp-net
+      - kapyo-net
 
-  pimp-backend:
-    build: ./pimp-backend
+  kapyo-backend:
+    build: ./kapyo-backend
     environment:
-      DATABASE_URL: postgresql+psycopg://${PIMP_DB_USER:-pimp}:${PIMP_DB_PASSWORD:-pimp}@pimp-db:5432/${PIMP_DB_NAME:-pimp}
+      DATABASE_URL: postgresql+psycopg://${KAPYO_DB_USER:-kapyo}:${KAPYO_DB_PASSWORD:-kapyo}@kapyo-db:5432/${KAPYO_DB_NAME:-kapyo}
       AUTH0_DOMAIN: ${AUTH0_DOMAIN}
       AUTH0_API_AUDIENCE: ${AUTH0_API_AUDIENCE}
       AUTH0_ALGORITHMS: RS256
-      CORS_ORIGINS: ${CORS_ORIGINS:-http://pimp.localhost,http://shop-a.localhost,http://shop-b.localhost}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://kapyo.localhost,http://shop-a.localhost,http://shop-b.localhost}
       SITE_A_KEY: ${SITE_A_KEY:-site-a-secret}
       SITE_B_KEY: ${SITE_B_KEY:-site-b-secret}
+      SITE_C_KEY: ${SITE_C_KEY:-}
+      SHOP_A_PLATFORM: ${SHOP_A_PLATFORM:-woocommerce}
+      SHOP_B_PLATFORM: ${SHOP_B_PLATFORM:-woocommerce}
+      SHOP_C_PLATFORM: ${SHOP_C_PLATFORM:-shopify}
       SHOP_A_WC_URL: http://shop-a
       SHOP_A_WC_HOST: shop-a.localhost
-      SHOP_A_WC_CONSUMER_KEY: ${SHOP_A_WC_CONSUMER_KEY:-ck_pimp_shop-a}
-      SHOP_A_WC_CONSUMER_SECRET: ${SHOP_A_WC_CONSUMER_SECRET:-cs_pimp_shop-a_secret}
+      SHOP_A_WC_CONSUMER_KEY: ${SHOP_A_WC_CONSUMER_KEY:-ck_kapyo_shop-a}
+      SHOP_A_WC_CONSUMER_SECRET: ${SHOP_A_WC_CONSUMER_SECRET:-cs_kapyo_shop-a_secret}
       SHOP_B_WC_URL: http://shop-b
       SHOP_B_WC_HOST: shop-b.localhost
-      SHOP_B_WC_CONSUMER_KEY: ${SHOP_B_WC_CONSUMER_KEY:-ck_pimp_shop-b}
-      SHOP_B_WC_CONSUMER_SECRET: ${SHOP_B_WC_CONSUMER_SECRET:-cs_pimp_shop-b_secret}
+      SHOP_B_WC_CONSUMER_KEY: ${SHOP_B_WC_CONSUMER_KEY:-ck_kapyo_shop-b}
+      SHOP_B_WC_CONSUMER_SECRET: ${SHOP_B_WC_CONSUMER_SECRET:-cs_kapyo_shop-b_secret}
+      # Shopify target (site-c). Inactive until SHOP_C_SHOPIFY_DOMAIN is set.
+      SHOP_C_HOST: ${SHOP_C_HOST:-}
+      SHOP_C_SHOPIFY_DOMAIN: ${SHOP_C_SHOPIFY_DOMAIN:-}
+      SHOP_C_SHOPIFY_ADMIN_TOKEN: ${SHOP_C_SHOPIFY_ADMIN_TOKEN:-}
+      SHOP_C_SHOPIFY_STOREFRONT_TOKEN: ${SHOP_C_SHOPIFY_STOREFRONT_TOKEN:-}
+      SHOP_C_SHOPIFY_API_VERSION: ${SHOP_C_SHOPIFY_API_VERSION:-2024-10}
+      SHOP_C_SHOPIFY_WEBHOOK_SECRET: ${SHOP_C_SHOPIFY_WEBHOOK_SECRET:-}
       B2B_EMAILS: ${B2B_EMAILS:-}
       CART_TTL_SECONDS: ${CART_TTL_SECONDS:-604800}
       ACTIVE_PRODUCTS_RECONCILE_SECONDS: ${ACTIVE_PRODUCTS_RECONCILE_SECONDS:-3600}
       STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
       STRIPE_PUBLISHABLE_KEY: ${STRIPE_PUBLISHABLE_KEY:-}
     depends_on:
-      pimp-db:
+      kapyo-db:
         condition: service_healthy
     labels:
       - traefik.enable=true
-      - traefik.http.routers.pimp-api.rule=Host(`api.pimp.localhost`)
-      - traefik.http.services.pimp-api.loadbalancer.server.port=8000
+      - traefik.http.routers.kapyo-api.rule=Host(`api.kapyo.localhost`)
+      - traefik.http.services.kapyo-api.loadbalancer.server.port=8000
     networks:
-      - pimp-net
+      - kapyo-net
 
-  pimp-frontend:
+  kapyo-frontend:
     build:
-      context: ./pimp-frontend
+      context: ./kapyo-frontend
       args:
         AUTH0_DOMAIN: ${AUTH0_DOMAIN}
         AUTH0_CLIENT_ID: ${AUTH0_SPA_CLIENT_ID}
         AUTH0_AUDIENCE: ${AUTH0_API_AUDIENCE}
-        API_URL: http://api.pimp.localhost
+        API_URL: http://api.kapyo.localhost
     labels:
       - traefik.enable=true
-      - traefik.http.routers.pimp-web.rule=Host(`pimp.localhost`)
-      - traefik.http.services.pimp-web.loadbalancer.server.port=80
+      - traefik.http.routers.kapyo-web.rule=Host(`kapyo.localhost`)
+      - traefik.http.services.kapyo-web.loadbalancer.server.port=80
     networks:
-      - pimp-net
+      - kapyo-net
 
   # ---------- WordPress Site A ----------
   shop-a-db:
@@ -89,7 +100,7 @@ services:
     volumes:
       - shop-a-db-data:/var/lib/mysql
     networks:
-      - pimp-net
+      - kapyo-net
 
   shop-a:
     image: wordpress:6.8-php8.3-apache
@@ -99,15 +110,15 @@ services:
       WORDPRESS_DB_PASSWORD: wordpress
       WORDPRESS_DB_NAME: wordpress
       WORDPRESS_CONFIG_EXTRA: |
-        define('PIMP_API_URL', 'http://api.pimp.localhost');
-        define('PIMP_SITE_ID', 'site-a');
-        define('PIMP_SITE_KEY', '${SITE_A_KEY:-site-a-secret}');
-        define('PIMP_AUTH0_DOMAIN', '${AUTH0_DOMAIN}');
-        define('PIMP_AUTH0_CLIENT_ID', '${AUTH0_SPA_CLIENT_ID}');
-        define('PIMP_AUTH0_AUDIENCE', '${AUTH0_API_AUDIENCE}');
+        define('KAPYO_API_URL', 'http://api.kapyo.localhost');
+        define('KAPYO_SITE_ID', 'site-a');
+        define('KAPYO_SITE_KEY', '${SITE_A_KEY:-site-a-secret}');
+        define('KAPYO_AUTH0_DOMAIN', '${AUTH0_DOMAIN}');
+        define('KAPYO_AUTH0_CLIENT_ID', '${AUTH0_SPA_CLIENT_ID}');
+        define('KAPYO_AUTH0_AUDIENCE', '${AUTH0_API_AUDIENCE}');
     volumes:
       - shop-a-data:/var/www/html
-      - ./wordpress/plugins/pimp-cart:/var/www/html/wp-content/plugins/pimp-cart
+      - ./wordpress/plugins/kapyo-cart:/var/www/html/wp-content/plugins/kapyo-cart
       - ./wordpress/mu-plugins/site-a:/var/www/html/wp-content/mu-plugins
     depends_on:
       - shop-a-db
@@ -116,7 +127,7 @@ services:
       - traefik.http.routers.shop-a.rule=Host(`shop-a.localhost`)
       - traefik.http.services.shop-a.loadbalancer.server.port=80
     networks:
-      - pimp-net
+      - kapyo-net
 
   shop-a-init:
     image: wordpress:cli-php8.3
@@ -128,16 +139,16 @@ services:
       WORDPRESS_DB_USER: wordpress
       WORDPRESS_DB_PASSWORD: wordpress
       WORDPRESS_DB_NAME: wordpress
-      PIMP_WC_CONSUMER_KEY: ${SHOP_A_WC_CONSUMER_KEY:-ck_pimp_shop-a}
-      PIMP_WC_CONSUMER_SECRET: ${SHOP_A_WC_CONSUMER_SECRET:-cs_pimp_shop-a_secret}
+      KAPYO_WC_CONSUMER_KEY: ${SHOP_A_WC_CONSUMER_KEY:-ck_kapyo_shop-a}
+      KAPYO_WC_CONSUMER_SECRET: ${SHOP_A_WC_CONSUMER_SECRET:-cs_kapyo_shop-a_secret}
     volumes:
       - shop-a-data:/var/www/html
-      - ./wordpress/plugins/pimp-cart:/var/www/html/wp-content/plugins/pimp-cart
+      - ./wordpress/plugins/kapyo-cart:/var/www/html/wp-content/plugins/kapyo-cart
       - ./wordpress/init:/init
     entrypoint: ["/bin/sh", "/init/setup.sh"]
     command: ["shop-a", "Maison Lumière", "#db2777", "fashion-a"]
     networks:
-      - pimp-net
+      - kapyo-net
 
   # ---------- WordPress Site B ----------
   shop-b-db:
@@ -150,7 +161,7 @@ services:
     volumes:
       - shop-b-db-data:/var/lib/mysql
     networks:
-      - pimp-net
+      - kapyo-net
 
   shop-b:
     image: wordpress:6.8-php8.3-apache
@@ -160,15 +171,15 @@ services:
       WORDPRESS_DB_PASSWORD: wordpress
       WORDPRESS_DB_NAME: wordpress
       WORDPRESS_CONFIG_EXTRA: |
-        define('PIMP_API_URL', 'http://api.pimp.localhost');
-        define('PIMP_SITE_ID', 'site-b');
-        define('PIMP_SITE_KEY', '${SITE_B_KEY:-site-b-secret}');
-        define('PIMP_AUTH0_DOMAIN', '${AUTH0_DOMAIN}');
-        define('PIMP_AUTH0_CLIENT_ID', '${AUTH0_SPA_CLIENT_ID}');
-        define('PIMP_AUTH0_AUDIENCE', '${AUTH0_API_AUDIENCE}');
+        define('KAPYO_API_URL', 'http://api.kapyo.localhost');
+        define('KAPYO_SITE_ID', 'site-b');
+        define('KAPYO_SITE_KEY', '${SITE_B_KEY:-site-b-secret}');
+        define('KAPYO_AUTH0_DOMAIN', '${AUTH0_DOMAIN}');
+        define('KAPYO_AUTH0_CLIENT_ID', '${AUTH0_SPA_CLIENT_ID}');
+        define('KAPYO_AUTH0_AUDIENCE', '${AUTH0_API_AUDIENCE}');
     volumes:
       - shop-b-data:/var/www/html
-      - ./wordpress/plugins/pimp-cart:/var/www/html/wp-content/plugins/pimp-cart
+      - ./wordpress/plugins/kapyo-cart:/var/www/html/wp-content/plugins/kapyo-cart
       - ./wordpress/mu-plugins/site-b:/var/www/html/wp-content/mu-plugins
     depends_on:
       - shop-b-db
@@ -177,7 +188,7 @@ services:
       - traefik.http.routers.shop-b.rule=Host(`shop-b.localhost`)
       - traefik.http.services.shop-b.loadbalancer.server.port=80
     networks:
-      - pimp-net
+      - kapyo-net
 
   shop-b-init:
     image: wordpress:cli-php8.3
@@ -189,24 +200,24 @@ services:
       WORDPRESS_DB_USER: wordpress
       WORDPRESS_DB_PASSWORD: wordpress
       WORDPRESS_DB_NAME: wordpress
-      PIMP_WC_CONSUMER_KEY: ${SHOP_B_WC_CONSUMER_KEY:-ck_pimp_shop-b}
-      PIMP_WC_CONSUMER_SECRET: ${SHOP_B_WC_CONSUMER_SECRET:-cs_pimp_shop-b_secret}
+      KAPYO_WC_CONSUMER_KEY: ${SHOP_B_WC_CONSUMER_KEY:-ck_kapyo_shop-b}
+      KAPYO_WC_CONSUMER_SECRET: ${SHOP_B_WC_CONSUMER_SECRET:-cs_kapyo_shop-b_secret}
     volumes:
       - shop-b-data:/var/www/html
-      - ./wordpress/plugins/pimp-cart:/var/www/html/wp-content/plugins/pimp-cart
+      - ./wordpress/plugins/kapyo-cart:/var/www/html/wp-content/plugins/kapyo-cart
       - ./wordpress/init:/init
     entrypoint: ["/bin/sh", "/init/setup.sh"]
     command: ["shop-b", "Urban Drop", "#7c3aed", "fashion-b"]
     networks:
-      - pimp-net
+      - kapyo-net
 
 volumes:
-  pimp-db-data:
+  kapyo-db-data:
   shop-a-data:
   shop-a-db-data:
   shop-b-data:
   shop-b-db-data:
 
 networks:
-  pimp-net:
+  kapyo-net:
     driver: bridge

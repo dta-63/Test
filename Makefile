@@ -1,7 +1,7 @@
 .PHONY: up down logs ps restart build clean hosts help
 
 help:
-	@echo "Pimp stack - commandes disponibles:"
+	@echo "Kapyo stack - commandes disponibles:"
 	@echo "  make up       - Lance toute la stack (la commande unique demandée)"
 	@echo "  make down     - Arrête la stack"
 	@echo "  make clean    - Arrête + supprime les volumes (RAZ totale)"
@@ -17,8 +17,8 @@ up:
 	@echo "Stack démarrée. Ajoutez les hosts ci-dessous à /etc/hosts si ce n'est pas déjà fait:"
 	@$(MAKE) -s hosts
 	@echo ""
-	@echo "  - Pimp SaaS:  http://pimp.localhost"
-	@echo "  - Pimp API:   http://api.pimp.localhost/docs"
+	@echo "  - Kapyo SaaS:  http://kapyo.localhost"
+	@echo "  - Kapyo API:   http://api.kapyo.localhost/docs"
 	@echo "  - Shop A:     http://shop-a.localhost"
 	@echo "  - Shop B:     http://shop-b.localhost"
 	@echo "  - Traefik:    http://localhost:8080"
@@ -39,4 +39,4 @@ build:
 	docker compose build
 
 hosts:
-	@echo "127.0.0.1 pimp.localhost api.pimp.localhost shop-a.localhost shop-b.localhost"
+	@echo "127.0.0.1 kapyo.localhost api.kapyo.localhost shop-a.localhost shop-b.localhost"

@@ -1,0 +1,28 @@
+/* Wrap the WC form actions + Kapyo button side by side */
+.woocommerce-variation-add-to-cart,
+.cart {
+  display: flex !important;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.kapyo-status {
+  flex-basis: 100%;
+  font-size: .85rem;
+  min-height: 1.2em;
+}
+.kapyo-status a {
+  color: #7c3aed;
+  text-decoration: underline;
+}
+
+.kapyo-status {
+  display: inline-block;
+  margin-left: 10px;
+  font-size: 13px;
+}
+
+.kapyo-status[data-kind="success"] { color: #047857; }
+.kapyo-status[data-kind="error"]   { color: #b91c1c; }
+.kapyo-status[data-kind="pending"] { color: #6b7280; }

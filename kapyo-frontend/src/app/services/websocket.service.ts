@@ -1,0 +1,142 @@
+import { Injectable, inject } from '@angular/core';
+import { AuthService } from '@auth0/auth0-angular';
+import { firstValueFrom } from 'rxjs';
+
+import { CartStore } from '@state/cart.store';
+import { env } from '@core/env';
+import { NotificationsService } from '@services/notifications.service';
+
+interface ServerEvent {
+  type: string;
+  site_id?: string;
+  product_id?: string;
+  reason?: string;
+  user_id?: number;
+  items?: { product_name?: string }[];
+}
+
+@Injectable({ providedIn: 'root' })
+export class WebSocketService {
+  private auth = inject(AuthService);
+  private cart = inject(CartStore);
+  private notif = inject(NotificationsService);
+
+  private socket: WebSocket | null = null;
+  private reconnectDelay = 1000;
+  private stopped = false;
+
+  async start(): Promise<void> {
+    this.stopped = false;
+    await this.connect();
+  }
+
+  stop(): void {
+    this.stopped = true;
+    this.socket?.close();
+    this.socket = null;
+  }
+
+  /**
+   * Always fetches a fresh token before connecting. This matters on reconnect:
+   * the token captured an hour ago is expired, and the server returns 1008.
+   * `getAccessTokenSilently()` either returns the cached token or refreshes
+   * via the refresh-token flow.
+   */
+  private async connect(): Promise<void> {
+    if (this.stopped) return;
+
+    let token: string;
+    try {
+      const isAuth = await firstValueFrom(this.auth.isAuthenticated$);
+      if (!isAuth) return;
+      token = await firstValueFrom(this.auth.getAccessTokenSilently());
+    } catch {
+      this.scheduleReconnect();
+      return;
+    }
+
+    const url = new URL(env.apiUrl);
+    url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
+    url.pathname = '/ws/cart';
+    url.searchParams.set('token', token);
+
+    const socket = new WebSocket(url.toString());
+    this.socket = socket;
+
+    socket.addEventListener('open', () => {
+      this.reconnectDelay = 1000;
+    });
+
+    socket.addEventListener('message', (e) => {
+      try {
+        this.handle(JSON.parse(e.data) as ServerEvent);
+      } catch {
+        /* ignore malformed */
+      }
+    });
+
+    socket.addEventListener('close', () => {
+      this.socket = null;
+      this.scheduleReconnect();
+    });
+
+    socket.addEventListener('error', () => socket.close());
+  }
+
+  private scheduleReconnect(): void {
+    if (this.stopped) return;
+    setTimeout(() => this.connect(), this.reconnectDelay);
+    this.reconnectDelay = Math.min(this.reconnectDelay * 2, 30_000);
+  }
+
+  private handle(event: ServerEvent): void {
+    switch (event.type) {
+      case 'hello':
+        return;
+      case 'cart.item_updated':
+        this.notif.push(
+          `Un article de votre panier a été mis à jour (${this.siteLabel(event.site_id)}).`,
+          'info',
+        );
+        this.cart.refresh();
+        return;
+      case 'cart.item_removed':
+        this.notif.push(
+          `Un article a été retiré de votre panier: le produit a été supprimé sur ${this.siteLabel(event.site_id)}.`,
+          'warning',
+        );
+        this.cart.refresh();
+        return;
+      case 'cart.items_expired': {
+        const n = event.items?.length ?? 0;
+        const sample = event.items?.[0]?.product_name;
+        const msg = n === 1 && sample
+          ? `« ${sample} » a expiré et a été retiré de votre panier.`
+          : `${n} article(s) ont expiré et ont été retirés de votre panier.`;
+        this.notif.push(msg, 'warning');
+        this.cart.refresh();
+        return;
+      }
+      case 'cart.checked_out':
+        this.cart.refresh();
+        return;
+      case 'order.status_changed':
+        this.notif.push(this.statusChangeMessage(event), 'info', 7000);
+        return;
+    }
+  }
+
+  private statusChangeMessage(event: ServerEvent & { external_order_number?: string; new_status?: string; tracking_number?: string }): string {
+    const site = this.siteLabel(event.site_id);
+    const num = event.external_order_number ? `#${event.external_order_number}` : '';
+    const status = event.new_status ?? '?';
+    const tracking = event.tracking_number ? ` — suivi: ${event.tracking_number}` : '';
+    return `Commande ${num} (${site}) → ${status}${tracking}`;
+  }
+
+  private siteLabel(siteId: string | undefined): string {
+    if (siteId === 'site-a') return 'Shop A';
+    if (siteId === 'site-b') return 'Shop B';
+    return 'la boutique';
+  }
+}

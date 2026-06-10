@@ -1,4 +1,4 @@
-# Pimp — panier unifié multi-boutiques
+# Kapyo — panier unifié multi-boutiques
 
 Deux boutiques WordPress/WooCommerce et un SaaS Angular + FastAPI qui agrègent
 un panier unique par utilisateur, authentification gérée par **Auth0**, paiement
@@ -9,21 +9,21 @@ suivi de commandes en temps réel, dashboard B2B.
 
 | Spec | Implémentation |
 | --- | --- |
-| Bouton "Ajouter à mon panier PIMP" sur les pages produit | `wordpress/plugins/pimp-cart` — hook `woocommerce_after_add_to_cart_button` |
+| Bouton "Ajouter à mon panier KAPYO" sur les pages produit | `wordpress/plugins/kapyo-cart` — hook `woocommerce_after_add_to_cart_button` |
 | SSO utilisateur (IdP centralisé, sessions cross-domain) | Auth0 SPA flow (PKCE) côté SaaS *et* dans le plugin (auth0-spa-js, `cacheLocation: localstorage` + `useRefreshTokens`) |
-| S2S bidirectionnel | **Site → Pimp** : HMAC SHA256 sur les webhooks (clé partagée par site) ; **Pimp → Site** : (a) WC REST API consumer key/secret pour les commandes, (b) HMAC SHA256 custom sur `/wp-json/pimp/v1/*` |
-| Application du prix de la boutique (WC_Cart) | `POST /api/cart/preview` (Pimp) → `POST /wp-json/pimp/v1/cart/preview` (plugin) qui instancie `WC_Cart`, calcule subtotal / discount / shipping / tax / total |
-| Filtrage hooks via table SQL des produits actifs | Table `wp_pimp_active_products` ; hooks produit court-circuités si le produit n'est pas dans la table ; Pimp envoie touch/forget via `/wp-json/pimp/v1/active-products` à chaque add/remove/checkout |
+| S2S bidirectionnel | **Site → Kapyo** : HMAC SHA256 sur les webhooks (clé partagée par site) ; **Kapyo → Site** : (a) WC REST API consumer key/secret pour les commandes, (b) HMAC SHA256 custom sur `/wp-json/kapyo/v1/*` |
+| Application du prix de la boutique (WC_Cart) | `POST /api/cart/preview` (Kapyo) → `POST /wp-json/kapyo/v1/cart/preview` (plugin) qui instancie `WC_Cart`, calcule subtotal / discount / shipping / tax / total |
+| Filtrage hooks via table SQL des produits actifs | Table `wp_kapyo_active_products` ; hooks produit court-circuités si le produit n'est pas dans la table ; Kapyo envoie touch/forget via `/wp-json/kapyo/v1/active-products` à chaque add/remove/checkout |
 | TTL du panier (configurable) | `CART_TTL_SECONDS` env (par défaut 7 jours), `CartItem.expires_at`, purge à la lecture du panier + notification aux shops + push WS `cart.items_expired` (toast frontend) |
-| Réconciliation active-products | `ACTIVE_PRODUCTS_RECONCILE_SECONDS` env (par défaut 1h). Tâche `asyncio` lancée par le `lifespan` FastAPI : agrège tous les `(site, product_id)` en panier et appelle `/wp-json/pimp/v1/active-products {replace: [...]}` sur chaque shop pour resynchroniser la table SQL plugin |
-| Re-check stock au checkout | `/pimp/v1/cart/preview` retourne `available + reason + stock_left` par item ; `/api/payment/intent` retourne `409 items_unavailable` si une indisponibilité est détectée ; le dialog frontend bloque le paiement et liste les articles concernés |
+| Réconciliation active-products | `ACTIVE_PRODUCTS_RECONCILE_SECONDS` env (par défaut 1h). Tâche `asyncio` lancée par le `lifespan` FastAPI : agrège tous les `(site, product_id)` en panier et appelle `/wp-json/kapyo/v1/active-products {replace: [...]}` sur chaque shop pour resynchroniser la table SQL plugin |
+| Re-check stock au checkout | `/kapyo/v1/cart/preview` retourne `available + reason + stock_left` par item ; `/api/payment/intent` retourne `409 items_unavailable` si une indisponibilité est détectée ; le dialog frontend bloque le paiement et liste les articles concernés |
 | Currency mismatch | Si les shops retournent des devises mélangées, `/api/payment/intent` retourne `409 currency_mismatch` ; `/api/cart/preview` expose `currency_mismatch: true` pour permettre au SPA d'avertir l'utilisateur sans planter |
 | Re-connect WebSocket avec token frais | À chaque reconnexion, `WebSocketService` rappelle `getAccessTokenSilently()` (refresh-token Auth0) avant d'ouvrir la socket — le token périmé après 1h n'est plus rejoué |
-| "Déjà dans le panier" sur la fiche produit | Au chargement de la page produit, le JS plugin appelle `GET /api/cart` (silent auth) et bascule le bouton sur l'état `data-in-cart="1"` (vert) avec un lien vers le SaaS Pimp si le produit y est déjà |
+| "Déjà dans le panier" sur la fiche produit | Au chargement de la page produit, le JS plugin appelle `GET /api/cart` (silent auth) et bascule le bouton sur l'état `data-in-cart="1"` (vert) avec un lien vers le SaaS Kapyo si le produit y est déjà |
 | Création des commandes via API marchande | `POST /wp-json/wc/v3/orders` avec billing + shipping + line_items + transaction_id (cf. spec) |
-| Suivi des commandes (statut, tracking) | Hook `woocommerce_order_status_changed` → `POST /api/webhooks/order` (HMAC) → mise à jour `PimpOrder.status` + push WS `order.status_changed` (+ tracking_number / tracking_url) |
-| Paiement unique via PSP | **Stripe Payment Intent** — `POST /api/payment/intent` interroge chaque shop (`/wp-json/pimp/v1/cart/preview`), persiste un `PaymentSnapshot` (billing/shipping + breakdown par site), crée le PI sur le grand-total ; `POST /api/payment/confirm` est idempotent (clé = PI id, retour caché du résultat sur retry), vérifie `status=succeeded` + `intent.amount == snapshot.amount`, puis crée chaque commande WC avec `shipping_lines = [{ total: <preview.shipping_total> }]` pour que le total WC matche le montant Stripe ; `set_paid: true`, `transaction_id: <charge_id>` |
-| Variations & quantité produit | Le bouton plugin n'embarque que `product_id` ; au clic JS lit la quantité (`input.qty`) et `variation_id` du formulaire WC, demande une signature fraîche à `wp_ajax_pimp_sign_add_to_cart` (HMAC sur `{site_id}.{ts}.{product_id}.{variation_id}.{quantity}`), puis POST vers Pimp. Couvre les produits variables et les quantités multiples sans staleness HMAC. |
+| Suivi des commandes (statut, tracking) | Hook `woocommerce_order_status_changed` → `POST /api/webhooks/order` (HMAC) → mise à jour `KapyoOrder.status` + push WS `order.status_changed` (+ tracking_number / tracking_url) |
+| Paiement unique via PSP | **Stripe Payment Intent** — `POST /api/payment/intent` interroge chaque shop (`/wp-json/kapyo/v1/cart/preview`), persiste un `PaymentSnapshot` (billing/shipping + breakdown par site), crée le PI sur le grand-total ; `POST /api/payment/confirm` est idempotent (clé = PI id, retour caché du résultat sur retry), vérifie `status=succeeded` + `intent.amount == snapshot.amount`, puis crée chaque commande WC avec `shipping_lines = [{ total: <preview.shipping_total> }]` pour que le total WC matche le montant Stripe ; `set_paid: true`, `transaction_id: <charge_id>` |
+| Variations & quantité produit | Le bouton plugin n'embarque que `product_id` ; au clic JS lit la quantité (`input.qty`) et `variation_id` du formulaire WC, demande une signature fraîche à `wp_ajax_kapyo_sign_add_to_cart` (HMAC sur `{site_id}.{ts}.{product_id}.{variation_id}.{quantity}`), puis POST vers Kapyo. Couvre les produits variables et les quantités multiples sans staleness HMAC. |
 | Dashboard / suivi B2B | `/api/b2b/dashboard` + page Angular `/b2b` — KPIs avec delta période précédente, filtres période (7/30/90/12m/all) et boutique, sparkline, top produits, tableau commandes paginé + recherche, modal détail commande, export CSV |
 
 ## Architecture
@@ -31,7 +31,7 @@ suivi de commandes en temps réel, dashboard B2B.
 ```
 ┌──────────────┐   Auth0 SPA flow (PKCE)    ┌───────────────────┐
 │  Shop A (WP) │ ─────────────────────────► │                   │
-│  WooCommerce │                            │   Pimp API        │
+│  WooCommerce │                            │   Kapyo API        │
 │  + plugin    │ ──── POST /cart/items ───► │  (FastAPI + JWT)  │
 └──────────────┘                            │                   │
                                             │   PostgreSQL      │
@@ -41,7 +41,7 @@ suivi de commandes en temps réel, dashboard B2B.
 └──────────────┘                                      │
                                                       ▼
                                          ┌──────────────────────┐
-                                         │   Pimp SaaS (Angular)│
+                                         │   Kapyo SaaS (Angular)│
                                          │   GET /cart          │
                                          └──────────────────────┘
 ```
@@ -54,10 +54,10 @@ Deux couches, chacune nécessaire :
 
 1. **Auth0 (qui est l'utilisateur)** — flow SPA PKCE depuis l'Angular *et*
    depuis le JS du plugin WordPress. Le token d'accès est présenté en
-   `Authorization: Bearer` à l'API Pimp, qui le valide contre les JWKS
+   `Authorization: Bearer` à l'API Kapyo, qui le valide contre les JWKS
    Auth0 (issuer + audience).
 2. **HMAC site (quelle boutique)** — à chaque clic sur "Ajouter à mon panier
-   Pimp", PHP signe `{site_id}.{timestamp}.{product_id}` avec `SITE_X_KEY`.
+   Kapyo", PHP signe `{site_id}.{timestamp}.{product_id}` avec `SITE_X_KEY`.
    L'API rejette les signatures invalides ou les timestamps > 5 min.
    Sans cela, un utilisateur authentifié pourrait forger un POST en
    prétendant venir de Shop A.
@@ -66,9 +66,9 @@ Deux couches, chacune nécessaire :
 
 ### 1. Créer un tenant Auth0 (gratuit)
 
-- **API** : Identifier `https://api.pimp.localhost` (c'est l'audience)
+- **API** : Identifier `https://api.kapyo.localhost` (c'est l'audience)
 - **Application SPA** : récupérer le *Client ID*
-  - Allowed Callback URLs : `http://pimp.localhost, http://shop-a.localhost, http://shop-b.localhost`
+  - Allowed Callback URLs : `http://kapyo.localhost, http://shop-a.localhost, http://shop-b.localhost`
   - Allowed Logout URLs et Allowed Web Origins : les trois mêmes URL
 
 ### 2. Configurer `.env`
@@ -89,7 +89,7 @@ Sans clés Stripe, le checkout retombe en mode "commandes en attente de paiement
 ### 3. Ajouter les hosts locaux
 
 ```
-127.0.0.1 pimp.localhost api.pimp.localhost shop-a.localhost shop-b.localhost
+127.0.0.1 kapyo.localhost api.kapyo.localhost shop-a.localhost shop-b.localhost
 ```
 
 `make hosts` affiche cette ligne.
@@ -113,24 +113,24 @@ Premier démarrage : ~2-3 min (WP + Woo + seed).
 
 | Service           | URL                                | Compte              |
 | ----------------- | ---------------------------------- | ------------------- |
-| Pimp SaaS         | http://pimp.localhost              | via Auth0           |
-| Pimp API (OpenAPI)| http://api.pimp.localhost/docs     | -                   |
+| Kapyo SaaS         | http://kapyo.localhost              | via Auth0           |
+| Kapyo API (OpenAPI)| http://api.kapyo.localhost/docs     | -                   |
 | Shop A (Maison Lumière) | http://shop-a.localhost            | admin / admin       |
 | Shop B (Urban Drop)     | http://shop-b.localhost            | admin / admin       |
 
 ## Parcours utilisateur
 
 1. Ouvrir `http://shop-a.localhost`, choisir un produit.
-2. Cliquer sur **Ajouter à mon panier Pimp** (bouton violet).
+2. Cliquer sur **Ajouter à mon panier Kapyo** (bouton violet).
 3. Auth0 redirige vers la page de login, puis revient sur la fiche produit.
-4. Le produit est envoyé vers Pimp et confirmé.
+4. Le produit est envoyé vers Kapyo et confirmé.
 5. Répéter sur `http://shop-b.localhost`.
-6. Ouvrir `http://pimp.localhost`, se connecter (même compte Auth0).
+6. Ouvrir `http://kapyo.localhost`, se connecter (même compte Auth0).
 7. Les articles des deux boutiques apparaissent dans un panier unique.
 8. Cliquer **Valider ma commande** → renseigner les adresses → payer via Stripe
    (carte test `4242 4242 4242 4242`, n'importe quelle date future, n'importe
    quel CVC).
-9. Pimp crée une commande sur chaque boutique, marquée `processing` avec le
+9. Kapyo crée une commande sur chaque boutique, marquée `processing` avec le
    `transaction_id` Stripe.
 
 ## Espace B2B
@@ -175,7 +175,7 @@ Clic sur une ligne → modal avec :
 Bouton **Exporter CSV** à droite de la barre de recherche. Le téléchargement
 respecte les filtres actifs (période, boutique, recherche) ; le CSV utilise
 `;` comme séparateur (compatible Excel FR) et est nommé
-`pimp-orders-<période>-<site>.csv`.
+`kapyo-orders-<période>-<site>.csv`.
 
 ### Endpoints B2B
 
@@ -196,16 +196,16 @@ Trois moyens d'accorder l'accès, dans l'ordre de priorité :
 1. **Auth0 RBAC (recommandé en prod)** : activer RBAC sur l'API,
    créer la permission `b2b:read`, l'assigner à un rôle, assigner le rôle aux
    utilisateurs, activer "Add Permissions in the Access Token".
-2. **Custom claim Auth0 Action** : émettre `https://pimp/roles` contenant
+2. **Custom claim Auth0 Action** : émettre `https://kapyo/roles` contenant
    `"b2b"` dans l'access token.
 3. **Allowlist email (démo)** : `B2B_EMAILS=alice@example.com,bob@company.fr`
    dans `.env`.
 
 ## Développement
 
-- Backend: `pimp-backend/app/` — hot reload : `docker compose exec pimp-backend uvicorn app.main:app --reload --host 0.0.0.0`
-- Frontend: `pimp-frontend/src/` — pour le dev, lancer `npx ng serve` localement pointant vers `http://api.pimp.localhost`
-- Plugin: `wordpress/plugins/pimp-cart/` — modifié à chaud (volume monté)
+- Backend: `kapyo-backend/app/` — hot reload : `docker compose exec kapyo-backend uvicorn app.main:app --reload --host 0.0.0.0`
+- Frontend: `kapyo-frontend/src/` — pour le dev, lancer `npx ng serve` localement pointant vers `http://api.kapyo.localhost`
+- Plugin: `wordpress/plugins/kapyo-cart/` — modifié à chaud (volume monté)
 
 ## Commandes
 
@@ -227,15 +227,15 @@ en haut de la page si c'est ton cas.
 
 ```bash
 # 1. Crée un tenant Auth0 (gratuit) :
-#    - API : Identifier = https://api.pimp.localhost
+#    - API : Identifier = https://api.kapyo.localhost
 #    - Application SPA : récupérer le Client ID
 #    - Allowed Callback / Logout / Web Origins URLs :
-#      http://pimp.localhost, http://shop-a.localhost, http://shop-b.localhost
+#      http://kapyo.localhost, http://shop-a.localhost, http://shop-b.localhost
 # 2. Renseigne .env :
 sed -i 's|AUTH0_DOMAIN=.*|AUTH0_DOMAIN=ton-tenant.eu.auth0.com|' .env
 sed -i 's|AUTH0_SPA_CLIENT_ID=.*|AUTH0_SPA_CLIENT_ID=xxxxxxxxxxxx|' .env
 # 3. Rebuild les services qui embarquent ces vars :
-docker compose up -d --build pimp-frontend pimp-backend
+docker compose up -d --build kapyo-frontend kapyo-backend
 ```
 
 ### « http://shop-{a,b}.localhost ne montre pas la liste des produits »
@@ -284,7 +284,7 @@ neuf déjà à la bonne version.
 Si l'env intercepte le HTTPS, le téléchargement depuis
 `downloads.wordpress.org` peut échouer. `setup.sh` retente automatiquement
 avec `wp plugin install --insecure` (idem pour `core update`).
-L'install est idempotente et indépendante du flag `pimp_demo_ready`,
+L'install est idempotente et indépendante du flag `kapyo_demo_ready`,
 donc ré-exécuter suffit :
 
 ```bash
@@ -300,7 +300,7 @@ network/proxy/HTTPS trust.` et sort en code 1. Solutions :
 2. Pré-télécharger `woocommerce.zip` localement et le copier dans le bind
    mount, puis `wp plugin install /var/www/html/woocommerce.zip --activate`
 
-### « Le bouton Pimp sur la fiche produit n'apparaît pas »
+### « Le bouton Kapyo sur la fiche produit n'apparaît pas »
 
 Vérifie que tu es bien sur une page produit (`/product/{slug}/`) et pas sur
 la liste. Le hook `woocommerce_after_add_to_cart_button` n'existe que sur
@@ -314,10 +314,10 @@ applique d'abord la fix de la section précédente.
 ├── docker-compose.yml
 ├── Makefile
 ├── .env.example
-├── pimp-backend/          # FastAPI + SQLAlchemy + Auth0 JWT
-├── pimp-frontend/         # Angular 18 + auth0-angular
+├── kapyo-backend/          # FastAPI + SQLAlchemy + Auth0 JWT
+├── kapyo-frontend/         # Angular 18 + auth0-angular
 └── wordpress/
-    ├── plugins/pimp-cart/ # plugin partagé Shop A & B
+    ├── plugins/kapyo-cart/ # plugin partagé Shop A & B
     ├── mu-plugins/        # must-use branding par site
     └── init/setup.sh      # wp-cli seed (products + styling)
 ```

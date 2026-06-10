@@ -62,15 +62,15 @@ if [ "${WP_VER:-0}" -lt 60800 ] 2>/dev/null; then
 fi
 
 # ---------------------------------------------------------------------------
-# Inject Pimp constants into wp-config.php if missing.
+# Inject Kapyo constants into wp-config.php if missing.
 # WORDPRESS_CONFIG_EXTRA is only written by the apache image's docker-entrypoint
 # on first volume initialisation — it is silently skipped when the volume already
 # exists. We patch wp-config.php directly so the plugin always finds its constants.
 # ---------------------------------------------------------------------------
-if ! grep -q 'PIMP_API_URL' /var/www/html/wp-config.php 2>/dev/null; then
-  echo "[init:$SLUG] injecting Pimp constants into wp-config.php..."
-  SITE_KEY="${PIMP_WC_CONSUMER_KEY:-${SLUG}-secret}"
-  sed -i "s|/\* That's all|define('PIMP_API_URL', 'http://api.pimp.localhost');\ndefine('PIMP_SITE_ID', '${SLUG}');\ndefine('PIMP_SITE_KEY', '${SITE_KEY}');\n/* That's all|" /var/www/html/wp-config.php
+if ! grep -q 'KAPYO_API_URL' /var/www/html/wp-config.php 2>/dev/null; then
+  echo "[init:$SLUG] injecting Kapyo constants into wp-config.php..."
+  SITE_KEY="${KAPYO_WC_CONSUMER_KEY:-${SLUG}-secret}"
+  sed -i "s|/\* That's all|define('KAPYO_API_URL', 'http://api.kapyo.localhost');\ndefine('KAPYO_SITE_ID', '${SLUG}');\ndefine('KAPYO_SITE_KEY', '${SITE_KEY}');\n/* That's all|" /var/www/html/wp-config.php
 fi
 
 # ---------------------------------------------------------------------------
@@ -111,35 +111,35 @@ ensure_woocommerce_active() {
   wp --allow-root plugin activate woocommerce
 }
 
-ensure_pimp_cart_active() {
-  # pimp-cart ships in /wp-content/plugins/pimp-cart via a bind mount;
+ensure_kapyo_cart_active() {
+  # kapyo-cart ships in /wp-content/plugins/kapyo-cart via a bind mount;
   # `wp plugin activate` is idempotent.
-  wp --allow-root plugin activate pimp-cart >/dev/null 2>&1 || true
+  wp --allow-root plugin activate kapyo-cart >/dev/null 2>&1 || true
 }
 
 # ---------------------------------------------------------------------------
 # Stage 1A: ensure plugins are installed + active. Idempotent, runs every time.
 # This is split out from the heavy seed so that even if a previous run set
-# pimp_demo_ready=1 without WC actually being active (e.g. SSL failure), we
+# kapyo_demo_ready=1 without WC actually being active (e.g. SSL failure), we
 # self-heal on next start.
 # ---------------------------------------------------------------------------
 if ! ensure_woocommerce_active; then
   echo "[init:$SLUG] WooCommerce not active — aborting setup. Fix the network and re-run." >&2
   exit 1
 fi
-ensure_pimp_cart_active
+ensure_kapyo_cart_active
 
 # ---------------------------------------------------------------------------
-# Stage 1B: heavy demo content (one-shot, guarded by pimp_demo_ready).
+# Stage 1B: heavy demo content (one-shot, guarded by kapyo_demo_ready).
 # Reset the flag if products are missing (e.g. previous run failed mid-seed).
 # ---------------------------------------------------------------------------
 PRODUCT_COUNT=$(wp --allow-root post list --post_type=product --post_status=publish --format=count 2>/dev/null || echo 0)
-if [ "${PRODUCT_COUNT:-0}" -eq 0 ] && [ "$(wp --allow-root option get pimp_demo_ready 2>/dev/null)" = "1" ]; then
-  echo "[init:$SLUG] pimp_demo_ready=1 but no products found — resetting for re-seed."
-  wp --allow-root option delete pimp_demo_ready 2>/dev/null || true
+if [ "${PRODUCT_COUNT:-0}" -eq 0 ] && [ "$(wp --allow-root option get kapyo_demo_ready 2>/dev/null)" = "1" ]; then
+  echo "[init:$SLUG] kapyo_demo_ready=1 but no products found — resetting for re-seed."
+  wp --allow-root option delete kapyo_demo_ready 2>/dev/null || true
 fi
 
-if [ "$(wp --allow-root option get pimp_demo_ready 2>/dev/null)" != "1" ]; then
+if [ "$(wp --allow-root option get kapyo_demo_ready 2>/dev/null)" != "1" ]; then
   # Skip Woo setup wizard and seed store.
   wp --allow-root option update woocommerce_store_address "1 rue de la Démo"
   wp --allow-root option update woocommerce_store_city "Paris"
@@ -198,28 +198,28 @@ if [ "$(wp --allow-root option get pimp_demo_ready 2>/dev/null)" != "1" ]; then
 
   wp --allow-root option update blogname "$TITLE"
   wp --allow-root option update blogdescription "Mode & Style"
-  wp --allow-root option update pimp_site_accent "$ACCENT"
-  wp --allow-root option update pimp_site_custom_css "$CSS"
+  wp --allow-root option update kapyo_site_accent "$ACCENT"
+  wp --allow-root option update kapyo_site_custom_css "$CSS"
 
-  PIMP_CK="${PIMP_WC_CONSUMER_KEY:-ck_pimp_${SLUG}}"
-  PIMP_CS="${PIMP_WC_CONSUMER_SECRET:-cs_pimp_${SLUG}_secret}"
-  echo "[init:$SLUG] seeding WooCommerce REST API key for Pimp..."
+  KAPYO_CK="${KAPYO_WC_CONSUMER_KEY:-ck_kapyo_${SLUG}}"
+  KAPYO_CS="${KAPYO_WC_CONSUMER_SECRET:-cs_kapyo_${SLUG}_secret}"
+  echo "[init:$SLUG] seeding WooCommerce REST API key for Kapyo..."
   wp --allow-root eval "
 global \$wpdb;
 \$table = \$wpdb->prefix . 'woocommerce_api_keys';
-\$key_hash = hash_hmac('sha256', '${PIMP_CK}', 'wc-api');
-\$wpdb->delete(\$table, ['description' => 'Pimp checkout']);
+\$key_hash = hash_hmac('sha256', '${KAPYO_CK}', 'wc-api');
+\$wpdb->delete(\$table, ['description' => 'Kapyo checkout']);
 \$wpdb->insert(\$table, [
     'user_id'         => 1,
-    'description'     => 'Pimp checkout',
+    'description'     => 'Kapyo checkout',
     'permissions'     => 'read_write',
     'consumer_key'    => \$key_hash,
-    'consumer_secret' => '${PIMP_CS}',
-    'truncated_key'   => substr('${PIMP_CK}', -7),
+    'consumer_secret' => '${KAPYO_CS}',
+    'truncated_key'   => substr('${KAPYO_CK}', -7),
 ]);
 "
 
-  wp --allow-root option update pimp_demo_ready 1
+  wp --allow-root option update kapyo_demo_ready 1
   echo "[init:$SLUG] heavy seed complete."
 fi
 
